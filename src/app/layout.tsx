@@ -1,7 +1,31 @@
 import type { Metadata, Viewport } from 'next';
+import dynamic from 'next/dynamic';
+import { Plus_Jakarta_Sans, Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
-import { AiAssistantDrawer } from '@/components/AiAssistantDrawer';
 import { CommandSearch } from '@/components/CommandSearch';
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  variable: '--font-display',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
+
+const AiAssistantDrawer = dynamic(
+  () => import('@/components/AiAssistantDrawer').then((mod) => mod.AiAssistantDrawer),
+  { ssr: false }
+);
 
 export const metadata: Metadata = {
   title: 'Brandicom Agency CRM',
@@ -25,8 +49,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body>
+    <html
+      lang="en"
+      className={`${plusJakartaSans.variable} ${outfit.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className={plusJakartaSans.className}>
         {children}
         <CommandSearch />
         <AiAssistantDrawer />

@@ -8,13 +8,25 @@ import { EXPENSE_CATEGORIES, INVOICE_STATUSES } from './constants';
 export { EXPENSE_CATEGORIES, INVOICE_STATUSES };
 
 const INVOICE_SELECT =
-  'id, client_id, number, issue_date, due_date, period_label, subtotal, vat_rate, total, status, notes, created_by, created_at, clients(name)';
+  'id, client_id, number, issue_date, due_date, period_label, subtotal, vat_rate, total, status, notes, created_by, created_at, clients(id, name, location, contact_name, contact_email, contact_phone, industry, services)';
 
 function mapInvoice(row: any, paidAmount = 0): InvoiceData {
   return {
     id: row.id,
     clientId: row.client_id,
     clientName: row.clients?.name,
+    client: row.clients
+      ? {
+          id: row.clients.id,
+          name: row.clients.name,
+          location: row.clients.location,
+          contactName: row.clients.contact_name,
+          contactEmail: row.clients.contact_email,
+          contactPhone: row.clients.contact_phone,
+          industry: row.clients.industry,
+          services: Array.isArray(row.clients.services) ? row.clients.services : [],
+        }
+      : null,
     number: row.number,
     issueDate: row.issue_date,
     dueDate: row.due_date,
@@ -203,6 +215,21 @@ export async function updateInvoice(
   return mapInvoice(data);
 }
 
+export async function deleteInvoice(id: string): Promise<boolean> {
+  const supabase = createServerSupabaseClient();
+  const { data: existing } = await supabase.from('invoices').select('id, number').eq('id', id).maybeSingle();
+  if (!existing) return false;
+
+  // Delete attached payments first to maintain relational integrity
+  await supabase.from('payments').delete().eq('invoice_id', id);
+
+  const { error } = await supabase.from('invoices').delete().eq('id', id);
+  if (error) throw error;
+
+  await logActivity({ action: 'delete', entity: 'invoice', entityId: id, diff: { number: existing.number } });
+  return true;
+}
+
 export async function recordPayment(input: {
   invoiceId: string;
   amount: number;
@@ -229,6 +256,36 @@ export async function recordPayment(input: {
     entityId: data.id,
     diff: { invoiceId: input.invoiceId, amount: input.amount },
   });
+
+  // Check cumulative payments and automatically update invoice status
+  try {
+    const { data: allPayments } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('invoice_id', input.invoiceId);
+    const totalPaid = (allPayments || []).reduce((acc: number, p: any) => acc + Number(p.amount), 0);
+
+    const { data: invRow } = await supabase
+      .from('invoices')
+      .select('total, status')
+      .eq('id', input.invoiceId)
+      .maybeSingle();
+
+    if (invRow) {
+      const isSettled = totalPaid >= Number(invRow.total);
+      const newStatus: InvoiceStatus = isSettled
+        ? 'paid'
+        : totalPaid > 0
+          ? 'partially_paid'
+          : invRow.status;
+      if (newStatus !== invRow.status) {
+        await supabase.from('invoices').update({ status: newStatus }).eq('id', input.invoiceId);
+      }
+    }
+  } catch (statusErr) {
+    console.error('Failed to auto-update invoice status after payment:', statusErr);
+  }
+
   return data;
 }
 

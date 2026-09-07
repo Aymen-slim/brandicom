@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { UserSummary, ClientData } from '@/types';
@@ -68,9 +69,12 @@ export function Sidebar({ user, topClients = [], isOpen = false, onClose }: Side
         <div className="sidebar-header-bar">
           <Link href="/dashboard" className="sidebar-brand-wrap" style={{ textDecoration: 'none' }}>
             <div className="sidebar-brand-badge">
-              <img
+              <Image
                 src="/logo.png"
                 alt="Brandicom Logo"
+                width={28}
+                height={28}
+                priority
                 className="sidebar-brand-img"
               />
             </div>

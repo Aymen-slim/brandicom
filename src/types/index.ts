@@ -237,6 +237,16 @@ export interface InvoiceData {
   id: string;
   clientId: string;
   clientName?: string;
+  client?: {
+    id?: string;
+    name: string;
+    location?: string | null;
+    contactName?: string | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    industry?: string | null;
+    services?: string[];
+  } | null;
   number: string;
   issueDate: string;
   dueDate: string | null;

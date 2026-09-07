@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { DeliverableData, DeliverableFormat, Platform } from '@/types';
 import {
   CheckCircle2,
@@ -213,34 +213,51 @@ export function DeliverableTracker({
     }
   };
 
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
   // Stats computation
-  const totalCount = deliverables.length;
-  const filmedCount = deliverables.filter((d) => d.filmed).length;
-  const toFilmCount = totalCount - filmedCount;
-  const publishedCount = deliverables.filter((d) => d.published).length;
-  const toPublishCount = totalCount - publishedCount;
+  const { totalCount, filmedCount, toFilmCount, publishedCount, toPublishCount, nextShoot, nextPost } = useMemo(() => {
+    const total = deliverables.length;
+    let filmed = 0;
+    let published = 0;
+    let shoot: string | undefined;
+    let post: string | undefined;
 
-  // Next dates
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const nextShoot = deliverables
-    .filter((d) => !d.filmed && d.filmingDate && d.filmingDate >= todayStr)
-    .sort((a, b) => (a.filmingDate! > b.filmingDate! ? 1 : -1))[0]?.filmingDate;
+    for (const d of deliverables) {
+      if (d.filmed) filmed++;
+      if (d.published) published++;
+      if (!d.filmed && d.filmingDate && d.filmingDate >= todayStr) {
+        if (!shoot || d.filmingDate < shoot) shoot = d.filmingDate;
+      }
+      if (!d.published && d.publishDate && d.publishDate >= todayStr) {
+        if (!post || d.publishDate < post) post = d.publishDate;
+      }
+    }
 
-  const nextPost = deliverables
-    .filter((d) => !d.published && d.publishDate && d.publishDate >= todayStr)
-    .sort((a, b) => (a.publishDate! > b.publishDate! ? 1 : -1))[0]?.publishDate;
+    return {
+      totalCount: total,
+      filmedCount: filmed,
+      toFilmCount: total - filmed,
+      publishedCount: published,
+      toPublishCount: total - published,
+      nextShoot: shoot,
+      nextPost: post,
+    };
+  }, [deliverables]);
 
   // Filtered deliverables
-  const filteredDeliverables = deliverables.filter((d) => {
-    if (viewMode === 'filming') {
-      if (filterStatus === 'unfilmed') return !d.filmed;
-      if (filterStatus === 'filmed') return d.filmed;
-    } else if (viewMode === 'posting') {
-      if (filterStatus === 'unposted') return !d.published;
-      if (filterStatus === 'posted') return d.published;
-    }
-    return true;
-  });
+  const filteredDeliverables = useMemo(() => {
+    return deliverables.filter((d) => {
+      if (viewMode === 'filming') {
+        if (filterStatus === 'unfilmed') return !d.filmed;
+        if (filterStatus === 'filmed') return d.filmed;
+      } else if (viewMode === 'posting') {
+        if (filterStatus === 'unposted') return !d.published;
+        if (filterStatus === 'posted') return d.published;
+      }
+      return true;
+    });
+  }, [deliverables, viewMode, filterStatus]);
 
   const platformPills: Record<string, { bg: string; text: string }> = {
     instagram: { bg: '#fdf2f8', text: '#db2777' },

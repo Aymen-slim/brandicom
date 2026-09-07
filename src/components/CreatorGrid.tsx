@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CreatorData, CreatorRole } from '@/types';
 import { CreatorCard } from './CreatorCard';
 import { Search, Plus, X } from 'lucide-react';
@@ -50,18 +50,20 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
   ];
 
   // Filtering
-  const filteredCreators = creators.filter((c) => {
-    if (selectedRole !== 'all' && c.role !== selectedRole) return false;
-    if (onlyAvailable && !c.available) return false;
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchName = c.name.toLowerCase().includes(q);
-      const matchHandle = (c.instagramHandle || '').toLowerCase().includes(q);
-      const matchTag = c.styleTags.some((tag) => tag.toLowerCase().includes(q));
-      if (!matchName && !matchHandle && !matchTag) return false;
-    }
-    return true;
-  });
+  const filteredCreators = useMemo(() => {
+    return creators.filter((c) => {
+      if (selectedRole !== 'all' && c.role !== selectedRole) return false;
+      if (onlyAvailable && !c.available) return false;
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase();
+        const matchName = c.name.toLowerCase().includes(q);
+        const matchHandle = (c.instagramHandle || '').toLowerCase().includes(q);
+        const matchTag = c.styleTags.some((tag) => tag.toLowerCase().includes(q));
+        if (!matchName && !matchHandle && !matchTag) return false;
+      }
+      return true;
+    });
+  }, [creators, selectedRole, onlyAvailable, searchQuery]);
 
   const openCreateModal = () => {
     setEditingCreator(null);

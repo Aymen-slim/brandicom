@@ -109,14 +109,21 @@ export function ContentCalendar({
 
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
 
+  const clientMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of clients) {
+      map.set(c.id, c.name);
+    }
+    return map;
+  }, [clients]);
+
   // Compute all calendar events (both filming and posting)
   const allEvents = useMemo<CalendarEvent[]>(() => {
     const list: CalendarEvent[] = [];
 
     deliverables.forEach((del) => {
-      // Find client name
-      const client = clients.find((c) => c.id === del.clientId);
-      const clientName = del.clientName || client?.name || 'Client';
+      // Find client name in O(1)
+      const clientName = del.clientName || clientMap.get(del.clientId) || 'Client';
 
       // 1. Filming Event (Shoot)
       if (del.filmingDate) {
@@ -148,7 +155,7 @@ export function ContentCalendar({
     });
 
     return list;
-  }, [deliverables, clients, todayStr]);
+  }, [deliverables, clientMap, todayStr]);
 
   // Filter events according to UI controls
   const filteredEvents = useMemo(() => {

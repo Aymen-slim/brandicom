@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createServerSupabaseClient } from './supabase/server';
 import { ClientStatus, DashboardMetrics } from '@/types';
 import { currentMonth, detectPeriodKind, normalizePeriod } from './period';
@@ -212,7 +213,7 @@ async function computeSnapshotDirectly(
   };
 }
 
-async function getSnapshot(periodValue: string): Promise<DashboardSnapshot> {
+const getSnapshot = cache(async (periodValue: string): Promise<DashboardSnapshot> => {
   const supabase = createServerSupabaseClient();
   try {
     const { data, error } = await supabase.rpc('get_dashboard_snapshot', {
@@ -230,7 +231,7 @@ async function getSnapshot(periodValue: string): Promise<DashboardSnapshot> {
   }
 
   return computeSnapshotDirectly(supabase, periodValue);
-}
+});
 
 function calcPercent(actual: number, target: number) {
   if (target <= 0) return 100;

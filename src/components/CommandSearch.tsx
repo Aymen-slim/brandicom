@@ -24,11 +24,21 @@ export function CommandSearch() {
 
   useEffect(() => {
     if (!open || q.trim().length < 2) return;
+    const controller = new AbortController();
     const t = setTimeout(async () => {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-      if (res.ok) setResults(await res.json());
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+          signal: controller.signal,
+        });
+        if (res.ok) setResults(await res.json());
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error(err);
+      }
     }, 200);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [q, open]);
 
   if (!open) return null;

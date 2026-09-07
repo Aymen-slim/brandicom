@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from './supabase/server';
 
@@ -12,7 +13,7 @@ export function isAdmin(user: { role?: string } | null | undefined): boolean {
   return user?.role === 'admin';
 }
 
-export async function getSessionUser(): Promise<CurrentUser | null> {
+export const getSessionUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = createServerSupabaseClient();
 
   const {
@@ -42,7 +43,7 @@ export async function getSessionUser(): Promise<CurrentUser | null> {
     email: profile.email,
     role: profile.role,
   };
-}
+});
 
 export async function canAccessClient(
   userId: string,

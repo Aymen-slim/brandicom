@@ -2,6 +2,7 @@
 
 import React, { Suspense } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Compass, TrendingUp, Menu, Search, Sparkles } from 'lucide-react';
 import { PeriodPicker } from './PeriodPicker';
@@ -44,9 +45,12 @@ export function Header({ title, subtitle, user, children, onToggleNav }: HeaderP
 
         {/* Mobile Brand Mark */}
         <Link href="/dashboard" className="mobile-brand-icon" title="Brandicom CRM">
-          <img
+          <Image
             src="/logo.png"
             alt="Brandicom Logo"
+            width={28}
+            height={28}
+            priority
             className="mobile-brand-img"
           />
         </Link>

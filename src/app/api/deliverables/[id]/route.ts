@@ -129,7 +129,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Deliverable not found' }, { status: 404 });
     }
 
-    await logActivity({ action: 'update', entity: 'deliverable', entityId: deliverableId, diff: dataToUpdate });
+    await logActivity({ action: 'update', entity: 'deliverable', entityId: deliverableId, diff: dataToUpdate, actorId: user.id });
     return NextResponse.json(mapDeliverableRow(updateRes.data));
   } catch (err: any) {
     console.error('Error updating deliverable:', err);
@@ -167,7 +167,7 @@ export async function DELETE(
 
     const { error: deleteError } = await supabase.from('deliverables').delete().eq('id', deliverableId);
     if (deleteError) throw deleteError;
-    await logActivity({ action: 'delete', entity: 'deliverable', entityId: deliverableId });
+    await logActivity({ action: 'delete', entity: 'deliverable', entityId: deliverableId, actorId: user.id });
     return NextResponse.json({ success: true, message: 'Deliverable deleted' });
   } catch (err: any) {
     console.error('Error deleting deliverable:', err);

@@ -7,9 +7,11 @@ import { ClientDetailHeader } from './ClientDetailHeader';
 import { DeliverableTracker } from './DeliverableTracker';
 import { ChatThread } from './ChatThread';
 import { MetricsEntryModal } from './MetricsEntryModal';
-import { formatNumber, formatPercent } from '@/lib/format';
-import { FileText, Sparkles } from 'lucide-react';
-import Markdown from 'react-markdown';
+import dynamic from 'next/dynamic';
+import { formatMoney, formatNumber, formatPercent } from '@/lib/format';
+import { FileText, Sparkles, Plus, Printer, Trash2 } from 'lucide-react';
+
+const Markdown = dynamic(() => import('react-markdown'), { ssr: false });
 
 type Tab = 'overview' | 'content' | 'engagement' | 'partners' | 'finance' | 'chat';
 
@@ -36,6 +38,55 @@ export function ClientWorkspace({
   const [ideasBusy, setIdeasBusy] = useState(false);
   const [report, setReport] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<any[] | null>(null);
+  const [newInvoiceOpen, setNewInvoiceOpen] = useState(false);
+  const [newInvoiceSubtotal, setNewInvoiceSubtotal] = useState(
+    client.contract?.monthlyFee != null ? String(client.contract.monthlyFee) : ''
+  );
+  const [newInvoicePeriod, setNewInvoicePeriod] = useState(
+    new Date().toISOString().slice(0, 7)
+  );
+  const [newInvoiceDueDate, setNewInvoiceDueDate] = useState('');
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
+
+  const handleCreateInvoiceForClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newInvoiceSubtotal) return;
+    setCreatingInvoice(true);
+    try {
+      const res = await fetch('/api/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          subtotal: Number(newInvoiceSubtotal),
+          periodLabel: newInvoicePeriod || null,
+          dueDate: newInvoiceDueDate || null,
+          status: 'sent',
+        }),
+      });
+      if (res.ok) {
+        const created = await res.json();
+        setInvoices((prev) => [created, ...(prev || [])]);
+        setNewInvoiceOpen(false);
+      }
+    } finally {
+      setCreatingInvoice(false);
+    }
+  };
+
+  const handleDeleteInvoice = async (id: string, number: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer définitivement la facture ${number} ?`)) return;
+    try {
+      const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setInvoices((prev) => (prev || []).filter((i) => i.id !== id));
+      } else {
+        alert('Erreur lors de la suppression de la facture.');
+      }
+    } catch (err) {
+      console.error('Failed to delete invoice:', err);
+    }
+  };
 
   const tabs: Array<{ id: Tab; label: string; hide?: boolean }> = [
     { id: 'overview', label: 'Overview' },
@@ -288,35 +339,158 @@ export function ClientWorkspace({
       )}
 
       {tab === 'finance' && isAdmin && (
-        <div className="glass-card" style={{ padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700 }}>Invoices</h3>
-            <Link href="/finance/invoices" className="btn btn-secondary btn-sm">
-              All invoices
-            </Link>
+        <div className="glass-card" style={{ padding: 22 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>Factures & Règlements</h3>
+              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                Générez et imprimez les factures officielles avec les coordonnées de {client.name}.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => setNewInvoiceOpen(!newInvoiceOpen)}
+              >
+                <Plus size={13} /> {newInvoiceOpen ? 'Fermer' : 'Nouvelle Facture'}
+              </button>
+              <Link href="/finance/invoices" className="btn btn-secondary btn-sm">
+                Toutes les factures
+              </Link>
+            </div>
           </div>
+
+          {newInvoiceOpen && (
+            <form
+              onSubmit={handleCreateInvoiceForClient}
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: 10,
+                padding: 16,
+                marginBottom: 18,
+                display: 'grid',
+                gridTemplateColumns: '1.2fr 1fr 1fr auto',
+                gap: 10,
+                alignItems: 'end',
+              }}
+            >
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                  Montant HT (TND) *
+                </label>
+                <input
+                  className="input-field"
+                  type="number"
+                  step="0.001"
+                  required
+                  placeholder="ex: 4500"
+                  value={newInvoiceSubtotal}
+                  onChange={(e) => setNewInvoiceSubtotal(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                  Période (Mois)
+                </label>
+                <input
+                  className="input-field"
+                  placeholder="ex: 2026-09"
+                  value={newInvoicePeriod}
+                  onChange={(e) => setNewInvoicePeriod(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                  Échéance de paiement
+                </label>
+                <input
+                  className="input-field"
+                  type="date"
+                  value={newInvoiceDueDate}
+                  onChange={(e) => setNewInvoiceDueDate(e.target.value)}
+                />
+              </div>
+
+              <button type="submit" disabled={creatingInvoice} className="btn btn-primary">
+                {creatingInvoice ? 'Création…' : 'Émettre Facture'}
+              </button>
+            </form>
+          )}
+
           {!invoices ? (
-            <p style={{ fontSize: 13, color: '#9ca3af' }}>Loading…</p>
+            <p style={{ fontSize: 13, color: '#9ca3af' }}>Chargement des factures…</p>
           ) : invoices.length === 0 ? (
-            <p style={{ fontSize: 13, color: '#9ca3af' }}>No invoices yet.</p>
+            <p style={{ fontSize: 13, color: '#9ca3af' }}>Aucune facture émise pour ce client pour le moment.</p>
           ) : (
             <div className="table-responsive-wrapper">
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Number</th>
-                    <th>Total</th>
-                    <th>Status</th>
+                    <th>Numéro</th>
+                    <th>Période</th>
+                    <th>Total TTC</th>
+                    <th>Encaissé</th>
+                    <th>Statut</th>
+                    <th style={{ textAlign: 'right', paddingRight: 16 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.map((inv) => (
                     <tr key={inv.id}>
                       <td>
-                        <Link href={`/finance/invoices/${inv.id}`}>{inv.number}</Link>
+                        <Link href={`/finance/invoices/${inv.id}`} style={{ fontWeight: 700, color: '#4338ca' }}>
+                          {inv.number}
+                        </Link>
                       </td>
-                      <td>{inv.total}</td>
-                      <td>{inv.status}</td>
+                      <td style={{ fontSize: 12, color: '#64748b' }}>{inv.periodLabel || inv.issueDate}</td>
+                      <td style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                        {formatMoney(inv.total)}
+                      </td>
+                      <td style={{ fontVariantNumeric: 'tabular-nums', color: (inv.paidAmount || 0) > 0 ? '#059669' : undefined }}>
+                        {formatMoney(inv.paidAmount || 0)}
+                      </td>
+                      <td>
+                        <span
+                          className={`status-badge-pill ${
+                            inv.status === 'paid' ? 'paid' : inv.status === 'partially_paid' ? 'partially-paid' : 'pending'
+                          }`}
+                          style={{ fontSize: 10.5 }}
+                        >
+                          {inv.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right', paddingRight: 16 }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                          <Link
+                            href={`/finance/invoices/${inv.id}/print`}
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '3px 8px', fontSize: 11 }}
+                            title="Imprimer / Télécharger la Facture"
+                          >
+                            <Printer size={12} /> Facture
+                          </Link>
+                          <Link
+                            href={`/finance/invoices/${inv.id}`}
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '3px 8px', fontSize: 11 }}
+                          >
+                            Détails
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInvoice(inv.id, inv.number)}
+                            className="btn btn-ghost btn-sm"
+                            style={{ padding: '4px 6px', color: '#e11d48' }}
+                            title="Supprimer la facture"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

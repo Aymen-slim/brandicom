@@ -10,8 +10,11 @@ export default async function ClientsPage() {
   if (!user) redirect('/login');
 
   const isAdmin = user.role === 'admin';
-  const clients = await attachClientCounts(await fetchClients({ userRole: user.role, userId: user.id }));
-  const availableUsers = await fetchUsers();
+  const [rawClients, availableUsers] = await Promise.all([
+    fetchClients({ userRole: user.role, userId: user.id }),
+    fetchUsers(),
+  ]);
+  const clients = await attachClientCounts(rawClients);
 
   return (
     <AppShell

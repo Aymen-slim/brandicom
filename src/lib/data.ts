@@ -288,13 +288,18 @@ export async function logActivity(entry: {
   entityId?: string | null;
   diff?: Record<string, unknown> | null;
   source?: 'user' | 'ai';
+  actorId?: string | null;
 }) {
   const supabase = createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let actorId = entry.actorId;
+  if (actorId === undefined) {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    actorId = user?.id ?? null;
+  }
   await supabase.from('activity_log').insert({
-    actor_id: user?.id ?? null,
+    actor_id: actorId ?? null,
     action: entry.action,
     entity: entry.entity,
     entity_id: entry.entityId ?? null,
@@ -313,29 +318,44 @@ export async function fetchUsersWithCounts(): Promise<
     .order('name', { ascending: true });
 
   if (error) throw error;
+  const users = data || [];
+  if (users.length === 0) return [];
 
-  return Promise.all(
-    (data || []).map(async (u: any) => {
-      const [assignments, deliverables] = await Promise.all([
-        supabase
-          .from('client_assignments')
-          .select('user_id', { count: 'exact', head: true })
-          .eq('user_id', u.id),
-        supabase
-          .from('deliverables')
-          .select('created_by', { count: 'exact', head: true })
-          .eq('created_by', u.id),
-      ]);
-      return {
-        ...mapUserSummary(u),
-        createdAt: u.created_at,
-        _count: {
-          assignments: assignments.count ?? 0,
-          deliverables: deliverables.count ?? 0,
-        },
-      };
-    })
-  );
+  const userIds = users.map((u: any) => u.id);
+
+  const [assignmentsRes, deliverablesRes] = await Promise.all([
+    supabase
+      .from('client_assignments')
+      .select('user_id')
+      .in('user_id', userIds),
+    supabase
+      .from('deliverables')
+      .select('created_by')
+      .in('created_by', userIds),
+  ]);
+
+  const assignmentCountMap = new Map<string, number>();
+  for (const a of assignmentsRes.data || []) {
+    if (a.user_id) {
+      assignmentCountMap.set(a.user_id, (assignmentCountMap.get(a.user_id) || 0) + 1);
+    }
+  }
+
+  const deliverableCountMap = new Map<string, number>();
+  for (const d of deliverablesRes.data || []) {
+    if (d.created_by) {
+      deliverableCountMap.set(d.created_by, (deliverableCountMap.get(d.created_by) || 0) + 1);
+    }
+  }
+
+  return users.map((u: any) => ({
+    ...mapUserSummary(u),
+    createdAt: u.created_at,
+    _count: {
+      assignments: assignmentCountMap.get(u.id) ?? 0,
+      deliverables: deliverableCountMap.get(u.id) ?? 0,
+    },
+  }));
 }
 
 export async function fetchUsers(): Promise<UserSummary[]> {
@@ -395,28 +415,42 @@ export async function fetchClients(opts: {
 }
 
 export async function attachClientCounts(clients: ClientData[]): Promise<ClientData[]> {
+  if (!clients || clients.length === 0) return [];
   const supabase = createServerSupabaseClient();
-  return Promise.all(
-    clients.map(async (client) => {
-      const [deliverables, messages] = await Promise.all([
-        supabase
-          .from('deliverables')
-          .select('client_id', { count: 'exact', head: true })
-          .eq('client_id', client.id),
-        supabase
-          .from('messages')
-          .select('client_id', { count: 'exact', head: true })
-          .eq('client_id', client.id),
-      ]);
-      return {
-        ...client,
-        _count: {
-          deliverables: deliverables.count ?? 0,
-          messages: messages.count ?? 0,
-        },
-      };
-    })
-  );
+  const clientIds = clients.map((c) => c.id);
+
+  const [delivRes, msgRes] = await Promise.all([
+    supabase
+      .from('deliverables')
+      .select('client_id')
+      .in('client_id', clientIds),
+    supabase
+      .from('messages')
+      .select('client_id')
+      .in('client_id', clientIds),
+  ]);
+
+  const delivCountMap = new Map<string, number>();
+  for (const d of delivRes.data || []) {
+    if (d.client_id) {
+      delivCountMap.set(d.client_id, (delivCountMap.get(d.client_id) || 0) + 1);
+    }
+  }
+
+  const msgCountMap = new Map<string, number>();
+  for (const m of msgRes.data || []) {
+    if (m.client_id) {
+      msgCountMap.set(m.client_id, (msgCountMap.get(m.client_id) || 0) + 1);
+    }
+  }
+
+  return clients.map((client) => ({
+    ...client,
+    _count: {
+      deliverables: delivCountMap.get(client.id) ?? 0,
+      messages: msgCountMap.get(client.id) ?? 0,
+    },
+  }));
 }
 
 export async function fetchClientDetail(clientId: string, user?: CurrentUser | null) {
@@ -588,6 +622,7 @@ export async function fetchAdminPostingAlerts(): Promise<{
   let res: any = await supabase
     .from('deliverables')
     .select(CALENDAR_DELIVERABLE_SELECT)
+    .or('published.eq.false,filmed.eq.false')
     .order('created_at', { ascending: false });
 
   if (
@@ -599,6 +634,7 @@ export async function fetchAdminPostingAlerts(): Promise<{
     res = await supabase
       .from('deliverables')
       .select(CALENDAR_DELIVERABLE_SELECT_BASE)
+      .or('published.eq.false,filmed.eq.false')
       .order('created_at', { ascending: false });
   }
 

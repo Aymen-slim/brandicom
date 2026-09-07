@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enforceAdmin } from '@/lib/permissions';
-import { fetchInvoice, updateInvoice } from '@/lib/finance';
+import { fetchInvoice, updateInvoice, deleteInvoice } from '@/lib/finance';
 import { INVOICE_STATUSES } from '@/lib/constants';
 import { InvoiceStatus } from '@/types';
 
@@ -43,5 +43,21 @@ export async function PATCH(
   } catch (err: any) {
     console.error('Error updating invoice:', err);
     return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { user, error } = await enforceAdmin();
+  if (error || !user) return error;
+  try {
+    const success = await deleteInvoice(params.id);
+    if (!success) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('Error deleting invoice:', err);
+    return NextResponse.json({ error: 'Failed to delete invoice' }, { status: 500 });
   }
 }

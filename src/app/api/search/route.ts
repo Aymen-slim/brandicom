@@ -13,22 +13,20 @@ export async function GET(request: NextRequest) {
   const supabase = createServerSupabaseClient();
   const like = `%${q}%`;
 
-  const [clients, partners, deliverables] = await Promise.all([
+  const admin = isAdmin(user);
+  const [clients, partners, deliverables, invoicesRes] = await Promise.all([
     supabase.from('clients').select('id, name, status, location').or(`name.ilike.${like},location.ilike.${like}`).limit(8),
     supabase.from('creators').select('id, name, role').or(`name.ilike.${like},instagram_handle.ilike.${like}`).limit(8),
     supabase.from('deliverables').select('id, idea, client_id, status, clients(name)').ilike('idea', like).limit(8),
+    admin
+      ? supabase.from('invoices').select('id, number, total, status, clients(name)').ilike('number', like).limit(8)
+      : Promise.resolve({ data: [] }),
   ]);
-
-  let invoices: any[] = [];
-  if (isAdmin(user)) {
-    const { data } = await supabase.from('invoices').select('id, number, total, status, clients(name)').ilike('number', like).limit(8);
-    invoices = data || [];
-  }
 
   return NextResponse.json({
     clients: clients.data || [],
     partners: partners.data || [],
     deliverables: deliverables.data || [],
-    invoices,
+    invoices: invoicesRes.data || [],
   });
 }

@@ -41,6 +41,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
     location: '',
     status: 'potential' as ClientStatus,
     monthlyFee: '',
+    startDate: '',
     services: '',
     notes: '',
     assignedUserIds: [] as string[],
@@ -105,6 +106,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           name: formData.name.trim(),
           location: formData.location.trim() || null,
           status: formData.status,
+          startDate: formData.startDate || null,
           monthlyFee: isAdmin && formData.monthlyFee ? parseFloat(formData.monthlyFee) : null,
           services: formData.services.split(',').map((s) => s.trim()).filter(Boolean),
           notes: formData.notes.trim() || null,
@@ -121,6 +123,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           location: '',
           status: 'potential',
           monthlyFee: '',
+          startDate: '',
           services: '',
           notes: '',
           assignedUserIds: [],
@@ -474,17 +477,39 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                 )}
               </div>
 
-              <div>
-                <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                  Services (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={formData.services}
-                  onChange={(e) => setFormData({ ...formData, services: e.target.value })}
-                  placeholder="e.g. TikTok UGC, Instagram Reels, Creator Seeding"
-                  className="input-field"
-                />
+              <div className="grid-responsive-2" style={{ gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
+                    Client Start Date / Date de Début
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.startDate}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    className="input-field"
+                  />
+                  {formData.startDate && (
+                    <div style={{ marginTop: 4, fontSize: 11, color: '#4338ca', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span>⏱️ Ensemble depuis :</span>
+                      <span className="badge badge-active" style={{ fontSize: 10.5, padding: '1px 6px' }}>
+                        {formatTenure(formData.startDate)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
+                    Services (comma separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.services}
+                    onChange={(e) => setFormData({ ...formData, services: e.target.value })}
+                    placeholder="e.g. TikTok UGC, Instagram Reels, Creator Seeding"
+                    className="input-field"
+                  />
+                </div>
               </div>
 
               {/* Assign team members */}

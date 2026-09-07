@@ -10,6 +10,7 @@ import {
   Edit,
   Trash2,
   Users,
+  Calendar,
   X,
 } from 'lucide-react';
 
@@ -153,7 +154,10 @@ export function ClientDetailHeader({
               </div>
             )}
             {client.industry && <span>{client.industry}</span>}
-            <span>{formatTenure(client.startDate)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#4338ca', fontWeight: 600 }}>
+              <Calendar size={13} color="#6366f1" />
+              <span>{formatTenure(client.startDate)}</span>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Users size={13} color="#9ca3af" />
@@ -335,8 +339,13 @@ export function ClientDetailHeader({
                   <input className="input-field" value={industry} onChange={(e) => setIndustry(e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>Start date</label>
+                  <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>Client Start date</label>
                   <input type="date" className="input-field" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  {startDate && (
+                    <div style={{ marginTop: 3, fontSize: 10.5, color: '#4338ca', fontWeight: 600 }}>
+                      ⏱️ {formatTenure(startDate)}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>Contact</label>

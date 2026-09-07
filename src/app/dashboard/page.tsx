@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/permissions';
@@ -23,25 +23,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (!user) redirect('/login');
 
   const period = normalizePeriod(searchParams?.period || currentMonth());
-  const [metrics, top] = await Promise.all([
+  const supabase = createServerSupabaseClient();
+
+  const [metrics, top, clients, atRiskRes] = await Promise.all([
     computeGoalsAndMetrics(period),
     getDashboardClients(period),
+    fetchClients({ userRole: user.role, userId: user.id }),
+    supabase
+      .from('client_health_snapshots')
+      .select('client_id, score, risk, ai_summary, computed_at, clients(id, name, status)')
+      .in('risk', ['medium', 'high'])
+      .order('score', { ascending: true })
+      .limit(5),
   ]);
 
-  const clients = await fetchClients({ userRole: user.role, userId: user.id });
+  const atRisk = atRiskRes.data;
   const sidebarClients = clients.slice(0, 4).map((c) => ({
     id: c.id,
     name: c.name,
     monthlyFee: user.role === 'admin' ? c.contract?.monthlyFee ?? null : null,
   }));
-
-  const supabase = createServerSupabaseClient();
-  const { data: atRisk } = await supabase
-    .from('client_health_snapshots')
-    .select('client_id, score, risk, ai_summary, computed_at, clients(id, name, status)')
-    .in('risk', ['medium', 'high'])
-    .order('score', { ascending: true })
-    .limit(5);
 
   return (
     <AppShell
@@ -84,7 +85,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           badgeLabel={`${metrics.retention.actual}% retained`}
         />
         {user.role === 'admin' ? (
-          <FinanceSpark period={period} />
+          <Suspense
+            fallback={
+              <div className="glass-card" style={{ padding: 20, minHeight: 190 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Revenue vs expenses (year)</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 30 }}>Loading trend...</div>
+              </div>
+            }
+          >
+            <FinanceSpark period={period} />
+          </Suspense>
         ) : (
           <div className="glass-card" style={{ padding: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Views this period</div>

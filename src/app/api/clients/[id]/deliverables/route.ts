@@ -172,7 +172,7 @@ export async function POST(
     }
 
     if (fetchRes.error) throw fetchRes.error;
-    await logActivity({ action: 'create', entity: 'deliverable', entityId: deliverableRow!.id });
+    await logActivity({ action: 'create', entity: 'deliverable', entityId: deliverableRow!.id, actorId: user.id });
     return NextResponse.json(mapDeliverableRow(fetchRes.data), { status: 201 });
   } catch (err: any) {
     console.error('Error creating deliverable:', err);

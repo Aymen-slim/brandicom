@@ -11,8 +11,10 @@ export default async function SettingsPage() {
     redirect('/login');
   }
 
-  const users = await fetchUsersWithCounts();
-  const goals = await fetchGoals();
+  const [users, goals] = await Promise.all([
+    fetchUsersWithCounts(),
+    fetchGoals(),
+  ]);
 
   return (
     <AppShell

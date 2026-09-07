@@ -28,11 +28,12 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
     );
   }
 
-  const detail = await fetchClientDetail(params.id, user);
+  const [detail, users, creators] = await Promise.all([
+    fetchClientDetail(params.id, user),
+    fetchUsers(),
+    fetchAvailableCreators(),
+  ]);
   if (!detail) notFound();
-
-  const users = await fetchUsers();
-  const creators = await fetchAvailableCreators();
 
   return (
     <AppShell

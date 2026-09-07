@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { InvoiceData } from '@/types';
 import { formatMoney } from '@/lib/format';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2, Printer } from 'lucide-react';
 
 export function InvoiceManager({
   initialInvoices,
@@ -17,6 +17,20 @@ export function InvoiceManager({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ clientId: '', subtotal: '', periodLabel: '', dueDate: '' });
+
+  const handleDelete = async (id: string, number: string) => {
+    if (!confirm(`Voulez-vous vraiment supprimer définitivement la facture ${number} ?`)) return;
+    try {
+      const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setInvoices((prev) => prev.filter((i) => i.id !== id));
+      } else {
+        alert('Erreur lors de la suppression.');
+      }
+    } catch (err) {
+      console.error('Failed to delete invoice:', err);
+    }
+  };
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,18 +91,55 @@ export function InvoiceManager({
               <th>Total TTC</th>
               <th>Paid</th>
               <th>Status</th>
+              <th style={{ textAlign: 'right', paddingRight: 16 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {invoices.map((inv) => (
               <tr key={inv.id}>
                 <td>
-                  <Link href={`/finance/invoices/${inv.id}`}>{inv.number}</Link>
+                  <Link href={`/finance/invoices/${inv.id}`} style={{ fontWeight: 600, color: '#4338ca' }}>
+                    {inv.number}
+                  </Link>
                 </td>
-                <td>{inv.clientName}</td>
-                <td>{formatMoney(inv.total)}</td>
-                <td>{formatMoney(inv.paidAmount || 0)}</td>
-                <td style={{ textTransform: 'capitalize' }}>{inv.status.replace('_', ' ')}</td>
+                <td style={{ fontWeight: 600 }}>{inv.clientName}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>{formatMoney(inv.total)}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums', color: (inv.paidAmount || 0) > 0 ? '#059669' : undefined }}>
+                  {formatMoney(inv.paidAmount || 0)}
+                </td>
+                <td>
+                  <span className={`status-badge-pill ${inv.status === 'paid' ? 'paid' : inv.status === 'partially_paid' ? 'partially-paid' : 'pending'}`} style={{ fontSize: 10.5 }}>
+                    {inv.status.replace('_', ' ')}
+                  </span>
+                </td>
+                <td style={{ textAlign: 'right', paddingRight: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6 }}>
+                    <Link
+                      href={`/finance/invoices/${inv.id}/print`}
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '3px 8px', fontSize: 11 }}
+                      title="Imprimer / Télécharger la Facture"
+                    >
+                      <Printer size={12} /> Facture
+                    </Link>
+                    <Link
+                      href={`/finance/invoices/${inv.id}`}
+                      className="btn btn-primary btn-sm"
+                      style={{ padding: '3px 8px', fontSize: 11 }}
+                    >
+                      Détails
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(inv.id, inv.number)}
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding: '4px 6px', color: '#e11d48' }}
+                      title="Supprimer la facture"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

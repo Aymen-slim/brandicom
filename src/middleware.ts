@@ -39,14 +39,22 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
+  const isLogin = pathname === '/login';
+  const isAdminPath = ADMIN_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+
+  if (!isProtected && !isLogin && !isAdminPath) {
+    return response;
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const redirectWithCookies = (url: URL) => {
     const redirectRes = NextResponse.redirect(url);
@@ -64,9 +72,6 @@ export async function middleware(request: NextRequest) {
     return redirectWithCookies(new URL('/dashboard', request.url));
   }
 
-  const isAdminPath = ADMIN_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-  );
   if (user && isAdminPath) {
     const { data: profile } = await supabase
       .from('users')
