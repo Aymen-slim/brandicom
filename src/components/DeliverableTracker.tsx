@@ -1,0 +1,993 @@
+'use client';
+
+import React, { useState } from 'react';
+import { DeliverableData, DeliverableFormat, Platform } from '@/types';
+import {
+  CheckCircle2,
+  Circle,
+  ExternalLink,
+  Plus,
+  Trash2,
+  Calendar,
+  BarChart2,
+  Film,
+  Send,
+  Clock,
+  AlertCircle,
+  Video,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
+
+interface DeliverableTrackerProps {
+  clientId: string;
+  initialDeliverables: DeliverableData[];
+  availableCreators?: Array<{ id: string; name: string; role: string }>;
+  onUpdate?: () => void;
+}
+
+type ViewMode = 'all' | 'filming' | 'posting';
+
+export function DeliverableTracker({
+  clientId,
+  initialDeliverables,
+  availableCreators = [],
+  onUpdate,
+}: DeliverableTrackerProps) {
+  const [deliverables, setDeliverables] = useState<DeliverableData[]>(initialDeliverables);
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
+  const [isAdding, setIsAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+
+  // Form state for new deliverable
+  const [idea, setIdea] = useState('');
+  const [format, setFormat] = useState<DeliverableFormat>('reel');
+  const [platform, setPlatform] = useState<Platform>('instagram');
+  const [filmingDate, setFilmingDate] = useState('');
+  const [publishDate, setPublishDate] = useState('');
+  const [publishTime, setPublishTime] = useState('');
+  const [link, setLink] = useState('');
+  const [creatorId, setCreatorId] = useState('');
+
+  // Toggle filmed or published status
+  const handleToggle = async (id: string, field: 'filmed' | 'published', currentValue: boolean) => {
+    const nextValue = !currentValue;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Optimistic UI update
+    setDeliverables((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: nextValue };
+        // If marking as filmed and no filmingDate set, optionally record today
+        if (field === 'filmed' && nextValue && !item.filmingDate) {
+          updated.filmingDate = today;
+        }
+        // If marking as published and no publishDate set, optionally record today
+        if (field === 'published' && nextValue && !item.publishDate) {
+          updated.publishDate = today;
+        }
+        return updated;
+      })
+    );
+
+    try {
+      const payload: Record<string, unknown> = { [field]: nextValue };
+      const currentItem = deliverables.find((d) => d.id === id);
+      if (field === 'filmed' && nextValue && !currentItem?.filmingDate) {
+        payload.filmingDate = today;
+      }
+      if (field === 'published' && nextValue && !currentItem?.publishDate) {
+        payload.publishDate = today;
+      }
+
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        // Revert on failure
+        setDeliverables((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, [field]: currentValue } : item))
+        );
+      } else {
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Error updating deliverable:', err);
+      setDeliverables((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, [field]: currentValue } : item))
+      );
+    }
+  };
+
+  // Direct date change (for filmingDate or publishDate)
+  const handleDateChange = async (
+    id: string,
+    field: 'filmingDate' | 'publishDate',
+    newDate: string
+  ) => {
+    const dateVal = newDate || null;
+    setDeliverables((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, [field]: dateVal } : item))
+    );
+
+    try {
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: dateVal }),
+      });
+
+      if (!res.ok) {
+        console.error('Failed to update date');
+      } else {
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Error updating deliverable date:', err);
+    }
+  };
+
+  // Direct time change (for publishTime)
+  const handleTimeChange = async (id: string, newTime: string) => {
+    const timeVal = newTime || null;
+    setDeliverables((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, publishTime: timeVal } : item))
+    );
+
+    try {
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publishTime: timeVal }),
+      });
+      if (res.ok) {
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Error updating deliverable time:', err);
+    }
+  };
+
+  // Add new deliverable
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!idea.trim()) return;
+
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/deliverables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idea: idea.trim(),
+          format,
+          platform,
+          filmingDate: filmingDate || null,
+          publishDate: publishDate || null,
+          publishTime: publishTime || null,
+          link: link.trim() || null,
+          creatorId: creatorId || null,
+          filmed: false,
+          published: false,
+        }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        setDeliverables((prev) => [created, ...prev]);
+        setIdea('');
+        setLink('');
+        setFilmingDate('');
+        setPublishDate('');
+        setPublishTime('');
+        setCreatorId('');
+        setIsAdding(false);
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Failed to create deliverable:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Delete deliverable
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to remove this deliverable?')) return;
+
+    try {
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setDeliverables((prev) => prev.filter((d) => d.id !== id));
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Failed to delete deliverable:', err);
+    }
+  };
+
+  // Stats computation
+  const totalCount = deliverables.length;
+  const filmedCount = deliverables.filter((d) => d.filmed).length;
+  const toFilmCount = totalCount - filmedCount;
+  const publishedCount = deliverables.filter((d) => d.published).length;
+  const toPublishCount = totalCount - publishedCount;
+
+  // Next dates
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const nextShoot = deliverables
+    .filter((d) => !d.filmed && d.filmingDate && d.filmingDate >= todayStr)
+    .sort((a, b) => (a.filmingDate! > b.filmingDate! ? 1 : -1))[0]?.filmingDate;
+
+  const nextPost = deliverables
+    .filter((d) => !d.published && d.publishDate && d.publishDate >= todayStr)
+    .sort((a, b) => (a.publishDate! > b.publishDate! ? 1 : -1))[0]?.publishDate;
+
+  // Filtered deliverables
+  const filteredDeliverables = deliverables.filter((d) => {
+    if (viewMode === 'filming') {
+      if (filterStatus === 'unfilmed') return !d.filmed;
+      if (filterStatus === 'filmed') return d.filmed;
+    } else if (viewMode === 'posting') {
+      if (filterStatus === 'unposted') return !d.published;
+      if (filterStatus === 'posted') return d.published;
+    }
+    return true;
+  });
+
+  const platformPills: Record<string, { bg: string; text: string }> = {
+    instagram: { bg: '#fdf2f8', text: '#db2777' },
+    tiktok: { bg: '#ecfeff', text: '#0891b2' },
+    youtube: { bg: '#fef2f2', text: '#dc2626' },
+    facebook: { bg: '#eff6ff', text: '#2563eb' },
+  };
+
+  const formatDateDisplay = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    if (!y || !m || !d) return dateStr;
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const isOverdue = (dateStr: string | null, isDone: boolean) => {
+    if (!dateStr || isDone) return false;
+    return dateStr < todayStr;
+  };
+
+  const isToday = (dateStr: string | null) => {
+    return dateStr === todayStr;
+  };
+
+  return (
+    <div className="glass-card" style={{ overflow: 'hidden' }}>
+      {/* Top Header Bar */}
+      <div
+        style={{
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#111827', display: 'flex', alignItems: 'center', gap: 7 }}>
+            <Layers size={16} color="#4f46e5" /> Content Pipeline & Production
+          </h3>
+          <p style={{ fontSize: '12px', color: '#6b7280', marginTop: 2 }}>
+            Manage independent dates and statuses for <strong>Filming (Shoots)</strong> and <strong>Posting (Publishing)</strong>
+          </p>
+        </div>
+
+        <button
+          onClick={() => setIsAdding(!isAdding)}
+          className="btn btn-primary btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+        >
+          <Plus size={13} />
+          {isAdding ? 'Cancel' : 'Add Content'}
+        </button>
+      </div>
+
+      {/* Production Milestone Summary Cards */}
+      <div
+        className="grid-responsive-2"
+        style={{
+          padding: '14px 16px',
+          backgroundColor: '#f9fafb',
+          borderBottom: '1px solid var(--border-subtle)',
+          gap: 12,
+        }}
+      >
+        {/* Filming Milestone Card */}
+        <div
+          style={{
+            background: '#ffffff',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            border: viewMode === 'filming' ? '2px solid #8b5cf6' : '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onClick={() => {
+            setViewMode(viewMode === 'filming' ? 'all' : 'filming');
+            setFilterStatus('all');
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-flex', padding: 5, borderRadius: 6, background: '#f5f3ff', color: '#7c3aed' }}>
+                <Film size={14} />
+              </span>
+              <strong style={{ fontSize: '13px', color: '#111827' }}>Filming (Shoots)</strong>
+            </div>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: filmedCount === totalCount && totalCount > 0 ? '#ecfdf5' : '#f3f4f6',
+                color: filmedCount === totalCount && totalCount > 0 ? '#059669' : '#4b5563',
+              }}
+            >
+              {filmedCount} / {totalCount} Filmed
+            </span>
+          </div>
+
+          <div style={{ width: '100%', height: 4, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
+            <div
+              style={{
+                width: `${totalCount ? (filmedCount / totalCount) * 100 : 0}%`,
+                height: '100%',
+                background: '#8b5cf6',
+                borderRadius: 999,
+                transition: 'width 0.3s ease',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#6b7280' }}>
+            <span>{toFilmCount > 0 ? `${toFilmCount} remaining to shoot` : 'All scheduled content filmed!'}</span>
+            <span>{nextShoot ? `Next shoot: ${formatDateDisplay(nextShoot)}` : 'No upcoming shoot set'}</span>
+          </div>
+        </div>
+
+        {/* Posting Milestone Card */}
+        <div
+          style={{
+            background: '#ffffff',
+            padding: '12px 16px',
+            borderRadius: '10px',
+            border: viewMode === 'posting' ? '2px solid #2563eb' : '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onClick={() => {
+            setViewMode(viewMode === 'posting' ? 'all' : 'posting');
+            setFilterStatus('all');
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ display: 'inline-flex', padding: 5, borderRadius: 6, background: '#eff6ff', color: '#2563eb' }}>
+                <Send size={14} />
+              </span>
+              <strong style={{ fontSize: '13px', color: '#111827' }}>Posting (Distribution)</strong>
+            </div>
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: '12px',
+                background: publishedCount === totalCount && totalCount > 0 ? '#ecfdf5' : '#f3f4f6',
+                color: publishedCount === totalCount && totalCount > 0 ? '#059669' : '#4b5563',
+              }}
+            >
+              {publishedCount} / {totalCount} Published
+            </span>
+          </div>
+
+          <div style={{ width: '100%', height: 4, background: '#e5e7eb', borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
+            <div
+              style={{
+                width: `${totalCount ? (publishedCount / totalCount) * 100 : 0}%`,
+                height: '100%',
+                background: '#2563eb',
+                borderRadius: 999,
+                transition: 'width 0.3s ease',
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#6b7280' }}>
+            <span>{toPublishCount > 0 ? `${toPublishCount} remaining to post` : 'All scheduled content published!'}</span>
+            <span>{nextPost ? `Next post: ${formatDateDisplay(nextPost)}` : 'No upcoming post set'}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* View Mode Toolbar */}
+      <div
+        style={{
+          padding: '12px 18px',
+          borderBottom: '1px solid var(--border-subtle)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '12px' }}
+            onClick={() => {
+              setViewMode('all');
+              setFilterStatus('all');
+            }}
+          >
+            All Content ({totalCount})
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'filming' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '12px', backgroundColor: viewMode === 'filming' ? '#7c3aed' : undefined, color: viewMode === 'filming' ? '#fff' : undefined }}
+            onClick={() => {
+              setViewMode('filming');
+              setFilterStatus('all');
+            }}
+          >
+            <Film size={12} /> Filming Pipeline ({toFilmCount} pending)
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${viewMode === 'posting' ? 'btn-primary' : 'btn-ghost'}`}
+            style={{ fontSize: '12px', backgroundColor: viewMode === 'posting' ? '#2563eb' : undefined, color: viewMode === 'posting' ? '#fff' : undefined }}
+            onClick={() => {
+              setViewMode('posting');
+              setFilterStatus('all');
+            }}
+          >
+            <Send size={12} /> Posting Pipeline ({toPublishCount} pending)
+          </button>
+        </div>
+
+        {/* View-specific sub-filter pills */}
+        {viewMode === 'filming' && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: '#6b7280', marginRight: 4 }}>Filter:</span>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterStatus === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setFilterStatus('all')}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterStatus === 'unfilmed' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setFilterStatus('unfilmed')}
+            >
+              Needs Filming ({toFilmCount})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterStatus === 'filmed' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setFilterStatus('filmed')}
+            >
+              Filmed ({filmedCount})
+            </button>
+          </div>
+        )}
+
+        {viewMode === 'posting' && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: '#6b7280', marginRight: 4 }}>Filter:</span>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterStatus === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setFilterStatus('all')}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterStatus === 'unposted' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setFilterStatus('unposted')}
+            >
+              To Post ({toPublishCount})
+            </button>
+            <button
+              type="button"
+              className={`btn btn-xs ${filterStatus === 'posted' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ fontSize: '11px', padding: '2px 8px' }}
+              onClick={() => setFilterStatus('posted')}
+            >
+              Posted ({publishedCount})
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Add deliverable inline form */}
+      {isAdding && (
+        <form
+          onSubmit={handleCreate}
+          style={{
+            padding: '18px 20px',
+            backgroundColor: '#faf5ff',
+            borderBottom: '1px solid #e9d5ff',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <Sparkles size={14} color="#7c3aed" />
+            <strong style={{ fontSize: '13px', color: '#581c87' }}>New Content Deliverable</strong>
+          </div>
+
+          <div className="grid-responsive-3" style={{ gap: '10px' }}>
+            <div>
+              <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
+                Content Concept / Hook *
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. 3-Step Night Routine Macro UGC"
+                value={idea}
+                onChange={(e) => setIdea(e.target.value)}
+                required
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
+                Format
+              </label>
+              <select
+                value={format}
+                onChange={(e) => setFormat(e.target.value as DeliverableFormat)}
+                className="input-field"
+              >
+                <option value="reel">Reel / Short</option>
+                <option value="photo">Photo Still</option>
+                <option value="story">Story</option>
+                <option value="carousel">Carousel</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
+                Platform
+              </label>
+              <select
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value as Platform)}
+                className="input-field"
+              >
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+                <option value="youtube">YouTube</option>
+                <option value="facebook">Facebook</option>
+              </select>
+            </div>
+          </div>
+
+          {/* DEDICATED FILMING AND POSTING DATES */}
+          <div
+            className="grid-responsive-3"
+            style={{
+              gap: '10px',
+              padding: '12px',
+              backgroundColor: '#ffffff',
+              borderRadius: '8px',
+              border: '1px solid #e9d5ff',
+            }}
+          >
+            <div>
+              <label style={{ fontSize: '11.5px', color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                <Film size={12} /> Filming Date (Shoot)
+              </label>
+              <input
+                type="date"
+                value={filmingDate}
+                onChange={(e) => setFilmingDate(e.target.value)}
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11.5px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                <Send size={12} /> Posting Date (Publish)
+              </label>
+              <input
+                type="date"
+                value={publishDate}
+                onChange={(e) => setPublishDate(e.target.value)}
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11.5px', color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                <Clock size={12} /> Posting Time
+              </label>
+              <input
+                type="time"
+                value={publishTime}
+                onChange={(e) => setPublishTime(e.target.value)}
+                className="input-field"
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
+                Talent / Assigned Creator
+              </label>
+              <select
+                value={creatorId}
+                onChange={(e) => setCreatorId(e.target.value)}
+                className="input-field"
+              >
+                <option value="">-- Internal Agency Team --</option>
+                {availableCreators.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
+                Live URL (Optional)
+              </label>
+              <input
+                type="url"
+                placeholder="https://..."
+                value={link}
+                onChange={(e) => setLink(e.target.value)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => setIsAdding(false)}
+              className="btn btn-ghost btn-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn btn-primary btn-sm"
+            >
+              {saving ? 'Saving...' : 'Save Deliverable'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Deliverables Table */}
+      <div className="table-responsive-wrapper">
+        <table className="data-table">
+          <thead>
+            <tr>
+              {/* Filming Column Header */}
+              <th style={{ width: viewMode === 'filming' ? '180px' : '150px', minWidth: '140px', background: '#fbfaff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#6d28d9', fontWeight: 700 }}>
+                  <Film size={12} /> Filming
+                </div>
+              </th>
+
+              {/* Posting Column Header */}
+              <th style={{ width: viewMode === 'posting' ? '180px' : '150px', minWidth: '140px', background: '#f8fafc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#1d4ed8', fontWeight: 700 }}>
+                  <Send size={12} /> Posting
+                </div>
+              </th>
+
+              <th style={{ minWidth: '180px' }}>Idea / Concept</th>
+              <th style={{ minWidth: '120px' }}>Platform & Format</th>
+              <th style={{ minWidth: '120px' }}>Talent / Creator</th>
+
+              {viewMode !== 'filming' && <th>Attributed Results</th>}
+              <th style={{ textAlign: 'right', paddingRight: '16px', width: '50px' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredDeliverables.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  {deliverables.length === 0
+                    ? 'No deliverables tracked for this client yet.'
+                    : 'No content matching the selected filter.'}
+                </td>
+              </tr>
+            ) : (
+              filteredDeliverables.map((d) => {
+                const filmingOverdue = isOverdue(d.filmingDate, d.filmed);
+                const filmingToday = isToday(d.filmingDate);
+                const postingOverdue = isOverdue(d.publishDate, d.published);
+                const postingToday = isToday(d.publishDate);
+
+                return (
+                  <tr key={d.id}>
+                    {/* FILMING COLUMN: Status Toggle + Date Picker */}
+                    <td style={{ background: '#fbfaff' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggle(d.id, 'filmed', d.filmed)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: d.filmed ? '#059669' : '#9ca3af',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: 0,
+                          }}
+                          title={d.filmed ? 'Filmed (Click to mark unfilmed)' : 'Not filmed (Click to mark filmed)'}
+                        >
+                          {d.filmed ? <CheckCircle2 size={16} color="#059669" /> : <Circle size={16} />}
+                        </button>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <input
+                            type="date"
+                            value={d.filmingDate || ''}
+                            onChange={(e) => handleDateChange(d.id, 'filmingDate', e.target.value)}
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 4px',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '4px',
+                              background: '#fff',
+                              color: d.filmed ? '#059669' : filmingOverdue ? '#dc2626' : '#374151',
+                              fontWeight: d.filmingDate ? 600 : 400,
+                              maxWidth: '120px',
+                            }}
+                            title="Shoot / Filming Date"
+                          />
+                          {filmingOverdue && (
+                            <span style={{ fontSize: '10px', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+                              <AlertCircle size={10} /> Overdue shoot
+                            </span>
+                          )}
+                          {filmingToday && !d.filmed && (
+                            <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 700 }}>
+                              Shoot today!
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* POSTING COLUMN: Status Toggle + Date Picker */}
+                    <td style={{ background: '#f8fafc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggle(d.id, 'published', d.published)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: d.published ? '#2563eb' : '#9ca3af',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            padding: 0,
+                          }}
+                          title={d.published ? 'Posted (Click to mark unposted)' : 'Not posted (Click to mark posted)'}
+                        >
+                          {d.published ? <CheckCircle2 size={16} color="#2563eb" /> : <Circle size={16} />}
+                        </button>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              type="date"
+                              value={d.publishDate || ''}
+                              onChange={(e) => handleDateChange(d.id, 'publishDate', e.target.value)}
+                              style={{
+                                fontSize: '11px',
+                                padding: '2px 4px',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '4px',
+                                background: '#fff',
+                                color: d.published ? '#2563eb' : postingOverdue ? '#dc2626' : '#374151',
+                                fontWeight: d.publishDate ? 600 : 400,
+                                maxWidth: '105px',
+                              }}
+                              title="Posting / Publish Date"
+                            />
+                            <input
+                              type="time"
+                              value={d.publishTime || ''}
+                              onChange={(e) => handleTimeChange(d.id, e.target.value)}
+                              style={{
+                                fontSize: '11px',
+                                padding: '2px 4px',
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '4px',
+                                background: '#fff',
+                                color: '#374151',
+                                maxWidth: '72px',
+                              }}
+                              title="Posting Time (e.g. 18:00)"
+                            />
+                          </div>
+                          {postingOverdue && (
+                            <span style={{ fontSize: '10px', color: '#dc2626', display: 'flex', alignItems: 'center', gap: 3, fontWeight: 600 }}>
+                              <AlertCircle size={10} /> Overdue post
+                            </span>
+                          )}
+                          {postingToday && !d.published && (
+                            <span style={{ fontSize: '10px', color: '#2563eb', fontWeight: 700 }}>
+                              Post today{d.publishTime ? ` @ ${d.publishTime}` : ''}!
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Idea / Concept */}
+                    <td>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '13px' }}>{d.idea}</div>
+                      {d.link ? (
+                        <a
+                          href={d.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            fontSize: '11px',
+                            color: '#4f46e5',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px',
+                            marginTop: '3px',
+                            textDecoration: 'none',
+                          }}
+                        >
+                          <ExternalLink size={10} />
+                          View Live Post
+                        </a>
+                      ) : (
+                        <span style={{ fontSize: '10.5px', color: '#9ca3af' }}>No link attached</span>
+                      )}
+                    </td>
+
+                    {/* Platform & Format */}
+                    <td>
+                      <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        {d.platform && (
+                          <span
+                            style={{
+                              padding: '1.5px 7px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              textTransform: 'capitalize',
+                              backgroundColor: platformPills[d.platform]?.bg || '#f3f4f6',
+                              color: platformPills[d.platform]?.text || '#374151',
+                            }}
+                          >
+                            {d.platform}
+                          </span>
+                        )}
+                        {d.format && (
+                          <span
+                            style={{
+                              padding: '1.5px 7px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              backgroundColor: '#f3f4f6',
+                              color: '#6b7280',
+                              textTransform: 'capitalize',
+                            }}
+                          >
+                            {d.format}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Talent / Creator */}
+                    <td>
+                      {d.creatorAssignments && d.creatorAssignments.length > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: '#f3f4f6',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: '#111827',
+                            }}
+                          >
+                            {d.creatorAssignments[0].creator.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: '11px' }}>Internal Team</span>
+                      )}
+                    </td>
+
+                    {/* Results / Metrics */}
+                    {viewMode !== 'filming' && (
+                      <td>
+                        {d.results ? (
+                          <div
+                            style={{
+                              fontSize: '11.5px',
+                              color: '#059669',
+                              fontWeight: 500,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <BarChart2 size={11} />
+                            <span>{d.results}</span>
+                          </div>
+                        ) : d.latestMetrics ? (
+                          <div style={{ fontSize: '11px', color: '#4b5563' }}>
+                            {d.latestMetrics.views.toLocaleString()} views · {d.latestMetrics.likes.toLocaleString()} likes
+                          </div>
+                        ) : (
+                          <span style={{ color: '#9ca3af', fontSize: '11px' }}>—</span>
+                        )}
+                      </td>
+                    )}
+
+                    {/* Actions */}
+                    <td style={{ textAlign: 'right', paddingRight: '16px' }}>
+                      <button
+                        onClick={() => handleDelete(d.id)}
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#9ca3af', padding: '3px' }}
+                        title="Delete deliverable"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
