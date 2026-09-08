@@ -42,6 +42,8 @@ export function InvoiceDetail({
   const [recording, setRecording] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showFactureModal, setShowFactureModal] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState<string | null>(null);
 
   // Advance Payment & TVA Option State
   const [paymentType, setPaymentType] = useState<'standard' | 'advance'>('standard');
@@ -51,6 +53,14 @@ export function InvoiceDetail({
   const [customVatRate, setCustomVatRate] = useState('');
   const [amountHT, setAmountHT] = useState('');
 
+  const parseNumeric = (val: string | number | undefined | null) => {
+    if (val == null) return 0;
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    const clean = String(val).replace(',', '.').replace(/\s+/g, '').trim();
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  };
+
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const remaining = Math.max(0, invoice.total - totalPaid);
   const isPaid = totalPaid >= invoice.total;
@@ -58,19 +68,19 @@ export function InvoiceDetail({
 
   // Active TVA rate for calculation
   const activeVatRate = isCustomVat
-    ? (Number(customVatRate) || 0) / 100
+    ? (parseNumeric(customVatRate) || 0) / 100
     : paymentVatRate;
 
   // Real-time calculation from HT when "add_tva" mode is active
   const computedFromHT = useMemo(() => {
-    const ht = Number(amountHT) || 0;
+    const ht = parseNumeric(amountHT);
     const vat = Math.round(ht * activeVatRate * 1000) / 1000;
     const ttc = Math.round((ht + vat) * 1000) / 1000;
     return { ht, vat, ttc };
   }, [amountHT, activeVatRate]);
 
   // Actual TTC amount to record against the invoice
-  const effectiveAmountToRecord = tvaMode === 'add_tva' ? computedFromHT.ttc : Number(amount) || 0;
+  const effectiveAmountToRecord = tvaMode === 'add_tva' ? computedFromHT.ttc : parseNumeric(amount);
 
   // Preset quick advance payment amount
   const setAdvancePercent = (pct: number) => {
@@ -85,8 +95,14 @@ export function InvoiceDetail({
 
   const record = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPaymentError(null);
+    setPaymentSuccess(null);
+
     const numAmount = effectiveAmountToRecord;
-    if (!Number.isFinite(numAmount) || numAmount <= 0) return;
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      setPaymentError('Veuillez saisir un montant valide supérieur à 0.');
+      return;
+    }
 
     setRecording(true);
     try {
@@ -130,9 +146,15 @@ export function InvoiceDetail({
         setAmount('');
         setAmountHT('');
         setReference('');
-        // Automatically open the Facture modal so admin gets the facture receipt immediately!
-        setShowFactureModal(true);
+        setPaymentSuccess(`✓ Règlement de ${formatMoney(numAmount)} enregistré avec succès !`);
+        router.refresh();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setPaymentError(errData.error || 'Erreur lors de l’enregistrement du paiement.');
       }
+    } catch (err: any) {
+      console.error('Failed to record payment:', err);
+      setPaymentError(err.message || 'Erreur réseau lors de la communication avec le serveur.');
     } finally {
       setRecording(false);
     }
@@ -690,6 +712,28 @@ export function InvoiceDetail({
                   />
                 </div>
 
+                {paymentError && (
+                  <div style={{ padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 12, fontWeight: 600 }}>
+                    ⚠️ {paymentError}
+                  </div>
+                )}
+
+                {paymentSuccess && (
+                  <div style={{ padding: '10px 12px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ color: '#065f46', fontSize: 12, fontWeight: 600 }}>
+                      {paymentSuccess}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowFactureModal(true)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ fontSize: 11, padding: '3px 8px' }}
+                    >
+                      <FileText size={12} /> Voir Facture
+                    </button>
+                  </div>
+                )}
+
                 {/* Submit button */}
                 <button
                   type="submit"
@@ -701,8 +745,8 @@ export function InvoiceDetail({
                   {recording
                     ? 'Enregistrement…'
                     : paymentType === 'advance'
-                    ? `Valider l'Acompte (${formatMoney(effectiveAmountToRecord)}) & Obtenir Facture`
-                    : `Valider le Règlement (${formatMoney(effectiveAmountToRecord)}) & Obtenir Facture`}
+                    ? `Enregistrer l'Acompte (${formatMoney(effectiveAmountToRecord)})`
+                    : `Enregistrer le Règlement (${formatMoney(effectiveAmountToRecord)})`}
                 </button>
               </form>
             ) : (

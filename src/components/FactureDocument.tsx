@@ -79,7 +79,7 @@ export function FactureDocument({
                   alt="Brandicom"
                   width={38}
                   height={38}
-                  priority
+                  unoptimized
                   className="agency-logo-img"
                 />
               </div>
