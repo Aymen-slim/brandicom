@@ -10,6 +10,8 @@ import {
   toDateOnly,
   DELIVERABLE_SELECT,
   DELIVERABLE_SELECT_BASE,
+  isFilmingDateSupported,
+  getDeliverableSelect,
   logActivity,
 } from '@/lib/data';
 
@@ -74,12 +76,24 @@ export async function POST(
     }
 
     const publishDateOnly = toDateOnly(publishDate);
-    const filmingDateOnly = toDateOnly(filmingDate);
+    let filmingDateOnly = toDateOnly(filmingDate);
+    const isFilmed = Boolean(filmed) || status === 'filmed';
+    const isPublished = Boolean(published) || status === 'published';
+
     let resolvedStatus = isDeliverableStatus(status) ? status : undefined;
     if (!resolvedStatus) {
-      if (published) resolvedStatus = 'published';
-      else if (filmed) resolvedStatus = 'filmed';
+      if (isPublished) resolvedStatus = 'published';
+      else if (isFilmed) resolvedStatus = 'filmed';
       else resolvedStatus = 'idea';
+    } else {
+      if (isPublished) resolvedStatus = 'published';
+      else if (isFilmed && (resolvedStatus === 'idea' || resolvedStatus === 'scripted')) {
+        resolvedStatus = 'filmed';
+      }
+    }
+
+    if (isFilmed && !filmingDateOnly) {
+      filmingDateOnly = new Date().toISOString().slice(0, 10);
     }
 
     let calculatedScheduledAt = scheduledAt || null;
@@ -92,6 +106,8 @@ export async function POST(
     }
 
     const supabase = createServerSupabaseClient();
+    const supportsFilmingDate = await isFilmingDateSupported(supabase);
+
     const insertPayload: Record<string, unknown> = {
       client_id: clientId,
       idea: idea.trim(),
@@ -99,8 +115,8 @@ export async function POST(
       caption: typeof caption === 'string' ? caption.trim() : null,
       hook: typeof hook === 'string' ? hook.trim() : null,
       status: resolvedStatus,
-      filmed: Boolean(filmed),
-      published: Boolean(published),
+      filmed: isFilmed,
+      published: isPublished,
       link: typeof link === 'string' && link.trim() !== '' ? link.trim() : null,
       format: format && isDeliverableFormat(format) ? format : null,
       platform: platform && isPlatform(platform) ? platform : null,
@@ -112,7 +128,7 @@ export async function POST(
     if (publishTime && typeof publishTime === 'string') {
       insertPayload.publish_time = publishTime.trim();
     }
-    if (filmingDateOnly) {
+    if (supportsFilmingDate && filmingDateOnly) {
       insertPayload.filming_date = filmingDateOnly;
     }
 
@@ -149,21 +165,17 @@ export async function POST(
         scheduled_date: filmingDateOnly || publishDateOnly,
         status: 'booked',
       });
-      if (assignError) throw assignError;
+      if (assignError) console.warn('Could not record creator assignment:', assignError);
     }
 
+    const delivSelect = getDeliverableSelect(supportsFilmingDate);
     let fetchRes = await supabase
       .from('deliverables')
-      .select(DELIVERABLE_SELECT)
+      .select(delivSelect)
       .eq('id', deliverableRow!.id)
       .maybeSingle();
 
-    if (
-      fetchRes.error &&
-      (fetchRes.error.code === '42703' ||
-        fetchRes.error.message?.includes('filming_date') ||
-        fetchRes.error.message?.includes('publish_time'))
-    ) {
+    if (fetchRes.error) {
       fetchRes = await supabase
         .from('deliverables')
         .select(DELIVERABLE_SELECT_BASE)

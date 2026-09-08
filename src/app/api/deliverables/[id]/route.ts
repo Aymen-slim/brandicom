@@ -9,6 +9,8 @@ import {
   toDateOnly,
   DELIVERABLE_SELECT,
   DELIVERABLE_SELECT_BASE,
+  isFilmingDateSupported,
+  getDeliverableSelect,
   logActivity,
 } from '@/lib/data';
 
@@ -46,9 +48,27 @@ export async function PATCH(
     if (title !== undefined) dataToUpdate.title = typeof title === 'string' ? title.trim() : null;
     if (caption !== undefined) dataToUpdate.caption = typeof caption === 'string' ? caption.trim() : null;
     if (hook !== undefined) dataToUpdate.hook = typeof hook === 'string' ? hook.trim() : null;
-    if (status !== undefined && isDeliverableStatus(status)) dataToUpdate.status = status;
-    if (filmed !== undefined) dataToUpdate.filmed = Boolean(filmed);
-    if (published !== undefined) dataToUpdate.published = Boolean(published);
+    if (status !== undefined && isDeliverableStatus(status)) {
+      dataToUpdate.status = status;
+      if (status === 'filmed') dataToUpdate.filmed = true;
+      if (status === 'published') dataToUpdate.published = true;
+    }
+    if (filmed !== undefined) {
+      const isFilmed = Boolean(filmed);
+      dataToUpdate.filmed = isFilmed;
+      if (isFilmed && (dataToUpdate.status === undefined || dataToUpdate.status === 'idea' || dataToUpdate.status === 'scripted')) {
+        dataToUpdate.status = 'filmed';
+      } else if (!isFilmed && dataToUpdate.status === undefined) {
+        dataToUpdate.status = 'idea';
+      }
+    }
+    if (published !== undefined) {
+      const isPub = Boolean(published);
+      dataToUpdate.published = isPub;
+      if (isPub && dataToUpdate.status === undefined) {
+        dataToUpdate.status = 'published';
+      }
+    }
     if (link !== undefined) {
       dataToUpdate.link = typeof link === 'string' && link.trim() !== '' ? link.trim() : null;
     }
@@ -66,10 +86,23 @@ export async function PATCH(
       dataToUpdate.publish_time =
         typeof publishTime === 'string' && publishTime.trim() !== '' ? publishTime.trim() : null;
     }
-    if (filmingDate !== undefined) dataToUpdate.filming_date = toDateOnly(filmingDate);
+    const supabase = createServerSupabaseClient();
+    const supportsFilmingDate = await isFilmingDateSupported(supabase);
+
+    if (filmingDate !== undefined) {
+      const dateOnly = toDateOnly(filmingDate);
+      if (supportsFilmingDate) {
+        dataToUpdate.filming_date = dateOnly;
+      } else if (dateOnly) {
+        // Fallback: update creator assignment scheduled_date for this deliverable
+        await supabase
+          .from('creator_assignments')
+          .update({ scheduled_date: dateOnly })
+          .eq('deliverable_id', deliverableId);
+      }
+    }
     if (scheduledAt !== undefined) dataToUpdate.scheduled_at = scheduledAt || null;
 
-    const supabase = createServerSupabaseClient();
     const { data: existing, error: existingError } = await supabase
       .from('deliverables')
       .select('id, client_id, publish_date, scheduled_at')
@@ -101,11 +134,32 @@ export async function PATCH(
       }
     }
 
+    const selectQuery = getDeliverableSelect(supportsFilmingDate);
+
+    // If dataToUpdate has no keys (e.g. only filmingDate was sent and column is not in deliverables table),
+    // skip the update call to avoid PostgREST "empty body" error and simply fetch the current state
+    if (Object.keys(dataToUpdate).length === 0) {
+      const { data: currentData, error: fetchErr } = await supabase
+        .from('deliverables')
+        .select(selectQuery)
+        .eq('id', deliverableId)
+        .maybeSingle();
+      if (fetchErr) {
+        const fallback = await supabase
+          .from('deliverables')
+          .select(DELIVERABLE_SELECT_BASE)
+          .eq('id', deliverableId)
+          .single();
+        return NextResponse.json(mapDeliverableRow(fallback.data));
+      }
+      return NextResponse.json(mapDeliverableRow(currentData));
+    }
+
     let updateRes = await supabase
       .from('deliverables')
       .update(dataToUpdate)
       .eq('id', deliverableId)
-      .select(DELIVERABLE_SELECT)
+      .select(selectQuery)
       .maybeSingle();
 
     if (
@@ -116,12 +170,20 @@ export async function PATCH(
     ) {
       delete dataToUpdate.publish_time;
       delete dataToUpdate.filming_date;
-      updateRes = await supabase
-        .from('deliverables')
-        .update(dataToUpdate)
-        .eq('id', deliverableId)
-        .select(DELIVERABLE_SELECT_BASE)
-        .maybeSingle();
+      if (Object.keys(dataToUpdate).length > 0) {
+        updateRes = await supabase
+          .from('deliverables')
+          .update(dataToUpdate)
+          .eq('id', deliverableId)
+          .select(DELIVERABLE_SELECT_BASE)
+          .maybeSingle();
+      } else {
+        updateRes = await supabase
+          .from('deliverables')
+          .select(DELIVERABLE_SELECT_BASE)
+          .eq('id', deliverableId)
+          .maybeSingle();
+      }
     }
 
     if (updateRes.error) throw updateRes.error;

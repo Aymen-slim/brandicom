@@ -66,12 +66,39 @@ const DELIVERABLE_SELECT_BASE = `id, client_id, idea, title, caption, hook, film
 const DELIVERABLE_SELECT = `id, client_id, idea, title, caption, hook, filmed, published, status, link, format, platform, results, publish_date, publish_time, filming_date, scheduled_at, thumbnail_url, created_by, created_at, users!deliverables_created_by_fkey(id, name, email, role), creator_assignments(id, scheduled_date, status, creators(id, name, role, instagram_handle, available, style_tags, partner_type, company)), post_metrics(id, deliverable_id, captured_at, views, likes, comments, shares, saves, reach, impressions, link_clicks, followers_gained, source, note)`;
 const CALENDAR_DELIVERABLE_SELECT_BASE = `${DELIVERABLE_SELECT_BASE}, clients(id, name)`;
 const CALENDAR_DELIVERABLE_SELECT = `${DELIVERABLE_SELECT}, clients(id, name)`;
+let _filmingDateSupported: boolean | null = null;
+let _lastFilmingDateCheck = 0;
+
+export async function isFilmingDateSupported(supabase: any): Promise<boolean> {
+  const now = Date.now();
+  if (_filmingDateSupported !== null && now - _lastFilmingDateCheck < 60_000) {
+    return _filmingDateSupported;
+  }
+  try {
+    const { error } = await supabase.from('deliverables').select('filming_date').limit(1);
+    _filmingDateSupported = !error;
+  } catch {
+    _filmingDateSupported = false;
+  }
+  _lastFilmingDateCheck = now;
+  return _filmingDateSupported;
+}
+
+export function getDeliverableSelect(supportsFilmingDate: boolean): string {
+  return supportsFilmingDate ? DELIVERABLE_SELECT : DELIVERABLE_SELECT_BASE;
+}
+
+export function getCalendarDeliverableSelect(supportsFilmingDate: boolean): string {
+  return supportsFilmingDate ? CALENDAR_DELIVERABLE_SELECT : CALENDAR_DELIVERABLE_SELECT_BASE;
+}
+
 export {
   DELIVERABLE_SELECT,
   DELIVERABLE_SELECT_BASE,
   CALENDAR_DELIVERABLE_SELECT,
   CALENDAR_DELIVERABLE_SELECT_BASE,
 };
+
 
 const MESSAGE_SELECT = `id, client_id, sender_id, body, created_at, users!messages_sender_id_fkey(${USER_SUMMARY_SELECT})`;
 
@@ -465,10 +492,13 @@ export async function fetchClientDetail(clientId: string, user?: CurrentUser | n
   if (clientError) throw clientError;
   if (!clientRow) return null;
 
+  const supportsFilmingDate = await isFilmingDateSupported(supabase);
+  const delivSelect = getDeliverableSelect(supportsFilmingDate);
+
   const [deliverablesRes, creatorAssignmentsRes, messagesRes, healthRes, contractRes] = await Promise.all([
     supabase
       .from('deliverables')
-      .select(DELIVERABLE_SELECT)
+      .select(delivSelect)
       .eq('client_id', clientId)
       .order('created_at', { ascending: false }),
     supabase
@@ -500,21 +530,13 @@ export async function fetchClientDetail(clientId: string, user?: CurrentUser | n
 
   let deliverablesRows: any[] = deliverablesRes.data as any[];
   if (deliverablesRes.error) {
-    if (
-      deliverablesRes.error.code === '42703' ||
-      deliverablesRes.error.message?.includes('filming_date') ||
-      deliverablesRes.error.message?.includes('publish_time')
-    ) {
-      const fallbackRes: any = await supabase
-        .from('deliverables')
-        .select(DELIVERABLE_SELECT_BASE)
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
-      if (fallbackRes.error) throw fallbackRes.error;
-      deliverablesRows = fallbackRes.data || [];
-    } else {
-      throw deliverablesRes.error;
-    }
+    const fallbackRes: any = await supabase
+      .from('deliverables')
+      .select(DELIVERABLE_SELECT_BASE)
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+    if (fallbackRes.error) throw fallbackRes.error;
+    deliverablesRows = fallbackRes.data || [];
   }
 
   if (creatorAssignmentsRes.error) throw creatorAssignmentsRes.error;
@@ -558,18 +580,15 @@ export async function fetchClientDetail(clientId: string, user?: CurrentUser | n
 
 export async function fetchDeliverables(clientId: string): Promise<DeliverableData[]> {
   const supabase = createServerSupabaseClient();
+  const supportsFilmingDate = await isFilmingDateSupported(supabase);
+  const delivSelect = getDeliverableSelect(supportsFilmingDate);
   let res: any = await supabase
     .from('deliverables')
-    .select(DELIVERABLE_SELECT)
+    .select(delivSelect)
     .eq('client_id', clientId)
     .order('created_at', { ascending: false });
 
-  if (
-    res.error &&
-    (res.error.code === '42703' ||
-      res.error.message?.includes('filming_date') ||
-      res.error.message?.includes('publish_time'))
-  ) {
+  if (res.error) {
     res = await supabase
       .from('deliverables')
       .select(DELIVERABLE_SELECT_BASE)
@@ -585,7 +604,9 @@ export async function fetchCalendarDeliverables(opts?: {
   clientId?: string | null;
 }): Promise<DeliverableData[]> {
   const supabase = createServerSupabaseClient();
-  let query = supabase.from('deliverables').select(CALENDAR_DELIVERABLE_SELECT);
+  const supportsFilmingDate = await isFilmingDateSupported(supabase);
+  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate);
+  let query = supabase.from('deliverables').select(delivSelect);
 
   if (opts?.clientId) {
     query = query.eq('client_id', opts.clientId);
@@ -593,12 +614,7 @@ export async function fetchCalendarDeliverables(opts?: {
 
   let res: any = await query.order('created_at', { ascending: false });
 
-  if (
-    res.error &&
-    (res.error.code === '42703' ||
-      res.error.message?.includes('filming_date') ||
-      res.error.message?.includes('publish_time'))
-  ) {
+  if (res.error) {
     let fallbackQuery = supabase.from('deliverables').select(CALENDAR_DELIVERABLE_SELECT_BASE);
     if (opts?.clientId) {
       fallbackQuery = fallbackQuery.eq('client_id', opts.clientId);
@@ -618,19 +634,16 @@ export async function fetchAdminPostingAlerts(): Promise<{
 }> {
   const supabase = createServerSupabaseClient();
   const today = new Date().toISOString().split('T')[0];
+  const supportsFilmingDate = await isFilmingDateSupported(supabase);
+  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate);
 
   let res: any = await supabase
     .from('deliverables')
-    .select(CALENDAR_DELIVERABLE_SELECT)
+    .select(delivSelect)
     .or('published.eq.false,filmed.eq.false')
     .order('created_at', { ascending: false });
 
-  if (
-    res.error &&
-    (res.error.code === '42703' ||
-      res.error.message?.includes('filming_date') ||
-      res.error.message?.includes('publish_time'))
-  ) {
+  if (res.error) {
     res = await supabase
       .from('deliverables')
       .select(CALENDAR_DELIVERABLE_SELECT_BASE)

@@ -104,6 +104,8 @@ export function ContentCalendar({
     publishDate: '',
     publishTime: '',
     creatorId: '',
+    filmed: false,
+    status: 'idea' as DeliverableStatus,
   });
   const [creating, setCreating] = useState(false);
 
@@ -352,6 +354,52 @@ export function ContentCalendar({
     setShowCreateModal(true);
   };
 
+  // Toggle event completion directly from calendar card
+  const handleToggleEventCompleted = async (evt: CalendarEvent, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextCompleted = !evt.isCompleted;
+    const field = evt.type === 'filming' ? 'filmed' : 'published';
+
+    // Optimistically update
+    setDeliverables((prev) =>
+      prev.map((d) => {
+        if (d.id !== evt.deliverable.id) return d;
+        const updated = { ...d, [field]: nextCompleted };
+        if (field === 'filmed') {
+          updated.status = nextCompleted ? 'filmed' : (d.status === 'filmed' ? 'idea' : d.status);
+        }
+        if (field === 'published') {
+          updated.status = nextCompleted ? 'published' : (d.status === 'published' ? 'filmed' : d.status);
+        }
+        return updated;
+      })
+    );
+
+    try {
+      const payload: Record<string, unknown> = { [field]: nextCompleted };
+      if (field === 'filmed') {
+        payload.status = nextCompleted ? 'filmed' : 'idea';
+      }
+      if (field === 'published') {
+        payload.status = nextCompleted ? 'published' : 'filmed';
+      }
+
+      const res = await fetch(`/api/deliverables/${evt.deliverable.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setDeliverables((prev) =>
+          prev.map((d) => (d.id === updated.id ? { ...d, ...updated, clientName: evt.clientName } : d))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to toggle completion:', err);
+    }
+  };
+
   // Save changes from Edit Modal
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,12 +407,15 @@ export function ContentCalendar({
 
     setSavingEdit(true);
     try {
+      const isFilmed = editFormData.filmed || editFormData.status === 'filmed';
+      const isPublished = editFormData.published || editFormData.status === 'published';
+
       const payload: Record<string, unknown> = {
-        filmingDate: editFormData.filmingDate || null,
+        filmingDate: editFormData.filmingDate || (isFilmed ? formatDateKey(new Date()) : null),
         publishDate: editFormData.publishDate || null,
         publishTime: editFormData.publishTime || null,
-        filmed: editFormData.filmed,
-        published: editFormData.published,
+        filmed: isFilmed,
+        published: isPublished,
         status: editFormData.status,
         idea: editFormData.idea.trim(),
       };
@@ -399,15 +450,24 @@ export function ContentCalendar({
 
     setCreating(true);
     try {
+      const isFilmed = createFormData.filmed || createFormData.status === 'filmed';
+      const isPublished = createFormData.status === 'published';
+      let resolvedStatus = createFormData.status;
+      if (isFilmed && (resolvedStatus === 'idea' || resolvedStatus === 'scripted')) {
+        resolvedStatus = 'filmed';
+      }
+
       const payload = {
         idea: createFormData.idea.trim(),
         platform: createFormData.platform,
         format: createFormData.format,
-        filmingDate: createFormData.filmingDate || null,
+        filmingDate: createFormData.filmingDate || (isFilmed ? formatDateKey(new Date()) : null),
         publishDate: createFormData.publishDate || null,
         publishTime: createFormData.publishTime || null,
         creatorId: createFormData.creatorId || undefined,
-        status: 'idea',
+        filmed: isFilmed,
+        published: isPublished,
+        status: resolvedStatus,
       };
 
       const res = await fetch(`/api/clients/${createFormData.clientId}/deliverables`, {
@@ -434,6 +494,8 @@ export function ContentCalendar({
         publishDate: '',
         publishTime: '',
         creatorId: '',
+        filmed: false,
+        status: 'idea',
       });
     } catch (err: any) {
       alert(err.message || 'Failed to create deliverable');
@@ -932,25 +994,41 @@ export function ContentCalendar({
                                 : 'Post'}
                             </span>
 
-                            {evt.isCompleted ? (
-                              <span title="Completed" style={{ color: isFilming ? '#2563eb' : '#059669' }}>
-                                <Check size={11} strokeWidth={3} />
-                              </span>
-                            ) : evt.isOverdue ? (
-                              <span
-                                title="Overdue!"
-                                style={{
-                                  fontSize: '8.5px',
-                                  fontWeight: 800,
-                                  color: '#e11d48',
-                                  backgroundColor: '#ffe4e6',
-                                  padding: '1px 3px',
-                                  borderRadius: '3px',
-                                }}
-                              >
-                                OVERDUE
-                              </span>
-                            ) : null}
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleEventCompleted(evt, e)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                              }}
+                              title={evt.isCompleted ? 'Completed (Click to uncomplete)' : 'Pending (Click to mark completed)'}
+                            >
+                              {evt.isCompleted ? (
+                                <span title="Completed" style={{ color: isFilming ? '#2563eb' : '#059669' }}>
+                                  <Check size={11} strokeWidth={3} />
+                                </span>
+                              ) : evt.isOverdue ? (
+                                <span
+                                  title="Overdue!"
+                                  style={{
+                                    fontSize: '8.5px',
+                                    fontWeight: 800,
+                                    color: '#e11d48',
+                                    backgroundColor: '#ffe4e6',
+                                    padding: '1px 3px',
+                                    borderRadius: '3px',
+                                  }}
+                                >
+                                  OVERDUE
+                                </span>
+                              ) : (
+                                <span style={{ width: '10px', height: '10px', borderRadius: '50%', border: '1px solid #cbd5e1', display: 'inline-block' }} />
+                              )}
+                            </button>
                           </div>
 
                           {/* Client Name */}
@@ -1203,58 +1281,70 @@ export function ContentCalendar({
 
                       {/* Right: Status / Overdue Badge */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        {evt.isCompleted ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11.5px',
-                              color: '#059669',
-                              fontWeight: 700,
-                              backgroundColor: '#ecfdf5',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <CheckCircle2 size={13} />
-                            Completed
-                          </span>
-                        ) : evt.isOverdue ? (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11.5px',
-                              color: '#e11d48',
-                              fontWeight: 700,
-                              backgroundColor: '#ffe4e6',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <AlertCircle size={13} />
-                            Overdue
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              fontSize: '11.5px',
-                              color: '#4b5563',
-                              fontWeight: 600,
-                              backgroundColor: '#f3f4f6',
-                              padding: '3px 8px',
-                              borderRadius: '4px',
-                            }}
-                          >
-                            <Clock size={13} />
-                            Scheduled
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => handleToggleEventCompleted(evt, e)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                          }}
+                          title={evt.isCompleted ? 'Completed (Click to unmark)' : 'Pending (Click to mark complete)'}
+                        >
+                          {evt.isCompleted ? (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11.5px',
+                                color: '#059669',
+                                fontWeight: 700,
+                                backgroundColor: '#ecfdf5',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              <CheckCircle2 size={13} />
+                              Completed
+                            </span>
+                          ) : evt.isOverdue ? (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11.5px',
+                                color: '#e11d48',
+                                fontWeight: 700,
+                                backgroundColor: '#ffe4e6',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              <AlertCircle size={13} />
+                              Overdue
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11.5px',
+                                color: '#4b5563',
+                                fontWeight: 600,
+                                backgroundColor: '#f3f4f6',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              <Clock size={13} />
+                              Pending
+                            </span>
+                          )}
+                        </button>
 
                         <span style={{ fontSize: '12px', color: '#9ca3af' }}>➔</span>
                       </div>
@@ -1334,7 +1424,15 @@ export function ContentCalendar({
                       type="checkbox"
                       id="modal-filmed-check"
                       checked={editFormData.filmed}
-                      onChange={(e) => setEditFormData({ ...editFormData, filmed: e.target.checked })}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditFormData({
+                          ...editFormData,
+                          filmed: checked,
+                          status: checked && (editFormData.status === 'idea' || editFormData.status === 'scripted') ? 'filmed' : (!checked && editFormData.status === 'filmed' ? 'idea' : editFormData.status),
+                          filmingDate: checked && !editFormData.filmingDate ? formatDateKey(new Date()) : editFormData.filmingDate,
+                        });
+                      }}
                       style={{ accentColor: '#2563eb' }}
                     />
                     <label htmlFor="modal-filmed-check" style={{ fontSize: '11.5px', color: '#1e3a8a', cursor: 'pointer', fontWeight: 600 }}>
@@ -1372,7 +1470,15 @@ export function ContentCalendar({
                       type="checkbox"
                       id="modal-published-check"
                       checked={editFormData.published}
-                      onChange={(e) => setEditFormData({ ...editFormData, published: e.target.checked })}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setEditFormData({
+                          ...editFormData,
+                          published: checked,
+                          status: checked ? 'published' : (editFormData.status === 'published' ? (editFormData.filmed ? 'filmed' : 'idea') : editFormData.status),
+                          publishDate: checked && !editFormData.publishDate ? formatDateKey(new Date()) : editFormData.publishDate,
+                        });
+                      }}
                       style={{ accentColor: '#059669' }}
                     />
                     <label htmlFor="modal-published-check" style={{ fontSize: '11.5px', color: '#064e3b', cursor: 'pointer', fontWeight: 600 }}>
@@ -1389,7 +1495,18 @@ export function ContentCalendar({
                 </label>
                 <select
                   value={editFormData.status}
-                  onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as DeliverableStatus })}
+                  onChange={(e) => {
+                    const s = e.target.value as DeliverableStatus;
+                    const isFilmed = s === 'filmed' || s === 'editing' || s === 'scheduled' || s === 'published' || editFormData.filmed;
+                    const isPublished = s === 'published';
+                    setEditFormData({
+                      ...editFormData,
+                      status: s,
+                      filmed: isFilmed,
+                      published: isPublished,
+                      filmingDate: s === 'filmed' && !editFormData.filmingDate ? formatDateKey(new Date()) : editFormData.filmingDate,
+                    });
+                  }}
                   className="input-field"
                 >
                   <option value="idea">Idea Stage</option>
@@ -1574,6 +1691,79 @@ export function ContentCalendar({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Workflow Stage & Filmed Checkbox */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid #e2e8f0',
+                  flexWrap: 'wrap',
+                  gap: '10px',
+                }}
+              >
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '4px' }}>
+                    Workflow Stage
+                  </label>
+                  <select
+                    value={createFormData.status}
+                    onChange={(e) => {
+                      const s = e.target.value as DeliverableStatus;
+                      setCreateFormData({
+                        ...createFormData,
+                        status: s,
+                        filmed: s === 'filmed' || s === 'editing' || s === 'scheduled' || s === 'published' ? true : createFormData.filmed,
+                      });
+                    }}
+                    className="input-field"
+                    style={{ width: 'auto', padding: '4px 10px', fontSize: '12px' }}
+                  >
+                    <option value="idea">Idea Stage</option>
+                    <option value="scripted">Scripted / Pre-production</option>
+                    <option value="filmed">Filmed</option>
+                    <option value="editing">Editing / Post-production</option>
+                    <option value="scheduled">Scheduled for Publish</option>
+                    <option value="published">Published</option>
+                  </select>
+                </div>
+
+                <label
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: createFormData.filmed ? '#1d4ed8' : '#475569',
+                    backgroundColor: createFormData.filmed ? '#eff6ff' : '#ffffff',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    border: createFormData.filmed ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={createFormData.filmed}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setCreateFormData({
+                        ...createFormData,
+                        filmed: checked,
+                        status: checked && (createFormData.status === 'idea' || createFormData.status === 'scripted') ? 'filmed' : (!checked && createFormData.status === 'filmed' ? 'idea' : createFormData.status),
+                      });
+                    }}
+                    style={{ accentColor: '#2563eb', width: '15px', height: '15px' }}
+                  />
+                  <span>Shoot Completed / Filmed</span>
+                </label>
               </div>
 
               {/* Modal buttons */}

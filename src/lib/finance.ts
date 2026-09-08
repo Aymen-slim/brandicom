@@ -354,11 +354,27 @@ export async function createExpense(input: {
       recurrence: input.recurrence || null,
       created_by: input.createdBy,
     })
-    .select()
+    .select('*, clients(name), creators(name)')
     .single();
   if (error) throw error;
   await logActivity({ action: 'create', entity: 'expense', entityId: data.id, diff: { amount: input.amount, category: input.category } });
-  return data;
+  return {
+    id: data.id,
+    date: data.date,
+    amount: Number(data.amount),
+    category: data.category,
+    description: data.description,
+    clientId: data.client_id,
+    clientName: data.clients?.name ?? null,
+    partnerId: data.partner_id,
+    partnerName: data.creators?.name ?? null,
+    assignmentId: data.assignment_id,
+    recurring: data.recurring,
+    recurrence: data.recurrence,
+    receiptUrl: data.receipt_url,
+    createdBy: data.created_by,
+    createdAt: data.created_at,
+  };
 }
 
 export async function deleteExpense(id: string) {

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { DeliverableData, DeliverableFormat, Platform } from '@/types';
+import { DeliverableData, DeliverableFormat, DeliverableStatus, Platform } from '@/types';
 import {
   CheckCircle2,
   Circle,
@@ -49,6 +49,8 @@ export function DeliverableTracker({
   const [publishTime, setPublishTime] = useState('');
   const [link, setLink] = useState('');
   const [creatorId, setCreatorId] = useState('');
+  const [filmed, setFilmed] = useState(false);
+  const [status, setStatus] = useState<DeliverableStatus>('idea');
 
   // Toggle filmed or published status
   const handleToggle = async (id: string, field: 'filmed' | 'published', currentValue: boolean) => {
@@ -60,13 +62,17 @@ export function DeliverableTracker({
       prev.map((item) => {
         if (item.id !== id) return item;
         const updated = { ...item, [field]: nextValue };
-        // If marking as filmed and no filmingDate set, optionally record today
-        if (field === 'filmed' && nextValue && !item.filmingDate) {
-          updated.filmingDate = today;
+        if (field === 'filmed') {
+          if (nextValue && !item.filmingDate) {
+            updated.filmingDate = today;
+          }
+          updated.status = nextValue ? 'filmed' : (item.status === 'filmed' ? 'idea' : item.status);
         }
-        // If marking as published and no publishDate set, optionally record today
-        if (field === 'published' && nextValue && !item.publishDate) {
-          updated.publishDate = today;
+        if (field === 'published') {
+          if (nextValue && !item.publishDate) {
+            updated.publishDate = today;
+          }
+          updated.status = nextValue ? 'published' : (item.status === 'published' ? 'filmed' : item.status);
         }
         return updated;
       })
@@ -75,11 +81,17 @@ export function DeliverableTracker({
     try {
       const payload: Record<string, unknown> = { [field]: nextValue };
       const currentItem = deliverables.find((d) => d.id === id);
-      if (field === 'filmed' && nextValue && !currentItem?.filmingDate) {
-        payload.filmingDate = today;
+      if (field === 'filmed') {
+        if (nextValue && !currentItem?.filmingDate) {
+          payload.filmingDate = today;
+        }
+        payload.status = nextValue ? 'filmed' : (currentItem?.status === 'filmed' ? 'idea' : currentItem?.status || 'idea');
       }
-      if (field === 'published' && nextValue && !currentItem?.publishDate) {
-        payload.publishDate = today;
+      if (field === 'published') {
+        if (nextValue && !currentItem?.publishDate) {
+          payload.publishDate = today;
+        }
+        payload.status = nextValue ? 'published' : (currentItem?.status === 'published' ? 'filmed' : currentItem?.status || 'idea');
       }
 
       const res = await fetch(`/api/deliverables/${id}`, {
@@ -94,6 +106,10 @@ export function DeliverableTracker({
           prev.map((item) => (item.id === id ? { ...item, [field]: currentValue } : item))
         );
       } else {
+        const updated = await res.json();
+        setDeliverables((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+        );
         if (onUpdate) onUpdate();
       }
     } catch (err) {
@@ -101,6 +117,45 @@ export function DeliverableTracker({
       setDeliverables((prev) =>
         prev.map((item) => (item.id === id ? { ...item, [field]: currentValue } : item))
       );
+    }
+  };
+
+  // Direct status change
+  const handleStatusChange = async (id: string, newStatus: DeliverableStatus) => {
+    const isFilmed = newStatus === 'filmed' || newStatus === 'editing' || newStatus === 'scheduled' || newStatus === 'published';
+    const isPublished = newStatus === 'published';
+    const today = new Date().toISOString().slice(0, 10);
+
+    setDeliverables((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const updated = { ...item, status: newStatus };
+        if (newStatus === 'filmed' && !item.filmingDate) updated.filmingDate = today;
+        if (isFilmed) updated.filmed = true;
+        if (isPublished) updated.published = true;
+        return updated;
+      })
+    );
+
+    try {
+      const payload: Record<string, unknown> = { status: newStatus };
+      if (isFilmed) payload.filmed = true;
+      if (isPublished) payload.published = true;
+
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setDeliverables((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+        );
+        if (onUpdate) onUpdate();
+      }
+    } catch (err) {
+      console.error('Error updating deliverable status:', err);
     }
   };
 
@@ -167,13 +222,14 @@ export function DeliverableTracker({
           idea: idea.trim(),
           format,
           platform,
-          filmingDate: filmingDate || null,
+          filmingDate: filmingDate || (filmed ? new Date().toISOString().slice(0, 10) : null),
           publishDate: publishDate || null,
           publishTime: publishTime || null,
           link: link.trim() || null,
           creatorId: creatorId || null,
-          filmed: false,
-          published: false,
+          filmed,
+          published: status === 'published',
+          status,
         }),
       });
 
@@ -186,6 +242,8 @@ export function DeliverableTracker({
         setPublishDate('');
         setPublishTime('');
         setCreatorId('');
+        setFilmed(false);
+        setStatus('idea');
         setIsAdding(false);
         if (onUpdate) onUpdate();
       }
@@ -694,6 +752,81 @@ export function DeliverableTracker({
             </div>
           </div>
 
+          {/* Workflow Stage & Filmed Checkbox */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <label style={{ fontSize: '11.5px', color: '#334155', fontWeight: 600 }}>
+                Workflow Stage:
+              </label>
+              <select
+                value={status}
+                onChange={(e) => {
+                  const s = e.target.value as DeliverableStatus;
+                  setStatus(s);
+                  if (s === 'filmed' || s === 'editing' || s === 'scheduled' || s === 'published') {
+                    setFilmed(true);
+                    if (!filmingDate) setFilmingDate(new Date().toISOString().slice(0, 10));
+                  }
+                }}
+                className="input-field"
+                style={{ width: 'auto', padding: '4px 10px', fontSize: '12px' }}
+              >
+                <option value="idea">Idea Stage</option>
+                <option value="scripted">Scripted / Pre-production</option>
+                <option value="filmed">Filmed</option>
+                <option value="editing">Editing / Post-production</option>
+                <option value="scheduled">Scheduled for Publish</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: filmed ? '#059669' : '#475569',
+                backgroundColor: filmed ? '#ecfdf5' : '#ffffff',
+                padding: '5px 12px',
+                borderRadius: '6px',
+                border: filmed ? '1px solid #a7f3d0' : '1px solid #cbd5e1',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={filmed}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setFilmed(checked);
+                  if (checked) {
+                    if (status === 'idea' || status === 'scripted') setStatus('filmed');
+                    if (!filmingDate) setFilmingDate(new Date().toISOString().slice(0, 10));
+                  } else {
+                    if (status === 'filmed') setStatus('idea');
+                  }
+                }}
+                style={{ accentColor: '#059669', width: '15px', height: '15px' }}
+              />
+              <span>Shoot Completed / Filmed</span>
+            </label>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
             <button
               type="button"
@@ -733,6 +866,7 @@ export function DeliverableTracker({
               </th>
 
               <th style={{ minWidth: '180px' }}>Idea / Concept</th>
+              <th style={{ minWidth: '100px' }}>Stage</th>
               <th style={{ minWidth: '120px' }}>Platform & Format</th>
               <th style={{ minWidth: '120px' }}>Talent / Creator</th>
 
@@ -743,7 +877,7 @@ export function DeliverableTracker({
           <tbody>
             {filteredDeliverables.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
                   {deliverables.length === 0
                     ? 'No deliverables tracked for this client yet.'
                     : 'No content matching the selected filter.'}
@@ -901,6 +1035,49 @@ export function DeliverableTracker({
                       ) : (
                         <span style={{ fontSize: '10.5px', color: '#9ca3af' }}>No link attached</span>
                       )}
+                    </td>
+
+                    {/* Stage / Status Column */}
+                    <td>
+                      <select
+                        value={d.status || (d.published ? 'published' : d.filmed ? 'filmed' : 'idea')}
+                        onChange={(e) => handleStatusChange(d.id, e.target.value as DeliverableStatus)}
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          border: '1px solid #e2e8f0',
+                          backgroundColor:
+                            d.status === 'published' || d.published
+                              ? '#ecfdf5'
+                              : d.status === 'filmed' || d.filmed
+                              ? '#eff6ff'
+                              : d.status === 'editing'
+                              ? '#faf5ff'
+                              : d.status === 'scheduled'
+                              ? '#f0fdf4'
+                              : '#f8fafc',
+                          color:
+                            d.status === 'published' || d.published
+                              ? '#047857'
+                              : d.status === 'filmed' || d.filmed
+                              ? '#1d4ed8'
+                              : d.status === 'editing'
+                              ? '#7c3aed'
+                              : d.status === 'scheduled'
+                              ? '#15803d'
+                              : '#475569',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="idea">Idea</option>
+                        <option value="scripted">Scripted</option>
+                        <option value="filmed">Filmed</option>
+                        <option value="editing">Editing</option>
+                        <option value="scheduled">Scheduled</option>
+                        <option value="published">Published</option>
+                      </select>
                     </td>
 
                     {/* Platform & Format */}

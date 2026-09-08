@@ -113,6 +113,27 @@ export function ClientDetailHeader({
     );
   };
 
+  const handleHeaderStageChange = async (newStatus: ClientStatus) => {
+    setStatus(newStatus);
+    setClient((prev) => ({ ...prev, status: newStatus }));
+
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setClient((prev) => ({ ...prev, ...updated }));
+        if (onClientUpdated) onClientUpdated(updated);
+        router.refresh();
+      }
+    } catch (err) {
+      console.error('Failed to update stage:', err);
+    }
+  };
+
   return (
     <div
       className="glass-card"
@@ -129,7 +150,45 @@ export function ClientDetailHeader({
             <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>
               {client.name}
             </h1>
-            <StatusBadge status={client.status} />
+            <select
+              value={client.status}
+              onChange={(e) => handleHeaderStageChange(e.target.value as ClientStatus)}
+              style={{
+                fontSize: '11.5px',
+                fontWeight: 700,
+                padding: '3px 10px',
+                borderRadius: '6px',
+                border: '1px solid #e2e8f0',
+                backgroundColor:
+                  client.status === 'active'
+                    ? '#ecfdf5'
+                    : client.status === 'starting'
+                    ? '#e0f2fe'
+                    : client.status === 'potential'
+                    ? '#f3e8ff'
+                    : client.status === 'paused'
+                    ? '#fffbeb'
+                    : '#ffe4e6',
+                color:
+                  client.status === 'active'
+                    ? '#047857'
+                    : client.status === 'starting'
+                    ? '#0284c7'
+                    : client.status === 'potential'
+                    ? '#7e22ce'
+                    : client.status === 'paused'
+                    ? '#b45309'
+                    : '#be123c',
+                cursor: 'pointer',
+              }}
+              title="Change Client Stage"
+            >
+              <option value="potential">Potential</option>
+              <option value="starting">Starting</option>
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="churned">Churned</option>
+            </select>
             {client.health && (
               <span
                 style={{
@@ -289,18 +348,31 @@ export function ClientDetailHeader({
 
                 <div>
                   <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                    Stage
+                    Client Stage *
                   </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value as ClientStatus)}
                     className="input-field"
+                    style={{
+                      fontWeight: 600,
+                      backgroundColor:
+                        status === 'active'
+                          ? '#ecfdf5'
+                          : status === 'starting'
+                          ? '#e0f2fe'
+                          : status === 'potential'
+                          ? '#f3e8ff'
+                          : status === 'paused'
+                          ? '#fffbeb'
+                          : '#ffe4e6',
+                    }}
                   >
-                    <option value="potential">Potential</option>
-                    <option value="starting">Starting</option>
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="churned">Churned</option>
+                    <option value="potential">Potential (Lead / Proposal)</option>
+                    <option value="starting">Starting (Onboarding)</option>
+                    <option value="active">Active (Ongoing Retainer)</option>
+                    <option value="paused">Paused (On Hold)</option>
+                    <option value="churned">Churned (Inactive)</option>
                   </select>
                 </div>
               </div>

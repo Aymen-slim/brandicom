@@ -92,6 +92,31 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
     document.body.removeChild(link);
   };
 
+  // Quick stage change directly from table
+  const handleStageChange = async (clientId: string, newStatus: ClientStatus) => {
+    setClients((prev) =>
+      prev.map((c) => (c.id === clientId ? { ...c, status: newStatus } : c))
+    );
+
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        console.error('Failed to update client stage');
+      } else {
+        const updated = await res.json();
+        setClients((prev) =>
+          prev.map((c) => (c.id === clientId ? { ...c, ...updated } : c))
+        );
+      }
+    } catch (err) {
+      console.error('Error changing client stage:', err);
+    }
+  };
+
   // Create Client
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,9 +154,13 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           assignedUserIds: [],
         });
         router.refresh();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || 'Failed to create client account');
       }
     } catch (err) {
       console.error('Failed to create client:', err);
+      alert('Network error while creating client');
     } finally {
       setSubmitting(false);
     }
@@ -291,9 +320,47 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                         )}
                       </td>
 
-                      {/* Status */}
-                      <td>
-                        <StatusBadge status={client.status} size="sm" />
+                      {/* Status / Stage */}
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <select
+                          value={client.status}
+                          onChange={(e) => handleStageChange(client.id, e.target.value as ClientStatus)}
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            padding: '3px 8px',
+                            borderRadius: '5px',
+                            border: '1px solid #e2e8f0',
+                            backgroundColor:
+                              client.status === 'active'
+                                ? '#ecfdf5'
+                                : client.status === 'starting'
+                                ? '#e0f2fe'
+                                : client.status === 'potential'
+                                ? '#f3e8ff'
+                                : client.status === 'paused'
+                                ? '#fffbeb'
+                                : '#ffe4e6',
+                            color:
+                              client.status === 'active'
+                                ? '#047857'
+                                : client.status === 'starting'
+                                ? '#0284c7'
+                                : client.status === 'potential'
+                                ? '#7e22ce'
+                                : client.status === 'paused'
+                                ? '#b45309'
+                                : '#be123c',
+                            cursor: 'pointer',
+                          }}
+                          title="Change Client Stage"
+                        >
+                          <option value="potential">Potential</option>
+                          <option value="starting">Starting</option>
+                          <option value="active">Active</option>
+                          <option value="paused">Paused</option>
+                          <option value="churned">Churned</option>
+                        </select>
                       </td>
 
                       {isAdmin && (
@@ -431,18 +498,31 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
 
                 <div>
                   <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                    Stage
+                    Client Stage *
                   </label>
                   <select
                     value={formData.status}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as ClientStatus })}
                     className="input-field"
+                    style={{
+                      fontWeight: 600,
+                      backgroundColor:
+                        formData.status === 'active'
+                          ? '#ecfdf5'
+                          : formData.status === 'starting'
+                          ? '#e0f2fe'
+                          : formData.status === 'potential'
+                          ? '#f3e8ff'
+                          : formData.status === 'paused'
+                          ? '#fffbeb'
+                          : '#ffe4e6',
+                    }}
                   >
-                    <option value="potential">Potential</option>
-                    <option value="starting">Starting</option>
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="churned">Churned</option>
+                    <option value="potential">Potential (Lead / Proposal)</option>
+                    <option value="starting">Starting (Onboarding)</option>
+                    <option value="active">Active (Ongoing Retainer)</option>
+                    <option value="paused">Paused (On Hold)</option>
+                    <option value="churned">Churned (Inactive)</option>
                   </select>
                 </div>
               </div>
