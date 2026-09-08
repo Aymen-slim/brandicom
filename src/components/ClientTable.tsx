@@ -5,8 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
-import { formatMoney } from '@/lib/format';
-import { formatTenure } from '@/lib/format';
+import { formatMoney, formatTenure, formatNumber } from '@/lib/format';
 import {
   Search,
   Plus,
@@ -16,6 +15,7 @@ import {
   Video,
   X,
   MapPin,
+  Clock,
 } from 'lucide-react';
 
 interface ClientTableProps {
@@ -318,6 +318,41 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                             <span>{client.location}</span>
                           </div>
                         )}
+                        {(() => {
+                          const socials = client.socialAccounts || [];
+                          const cur = socials.reduce((acc, s) => acc + (s.followers || 0), 0);
+                          const base = socials.reduce((acc, s) => acc + (s.initialFollowers || 0), 0);
+                          if (cur > 0) {
+                            const diff = cur - base;
+                            return (
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  marginTop: 3,
+                                  fontSize: 11,
+                                  color: '#4b5563',
+                                }}
+                              >
+                                <span style={{ fontWeight: 600 }}>{formatNumber(cur)} followers</span>
+                                {base > 0 && diff !== 0 && (
+                                  <span
+                                    style={{
+                                      color: diff > 0 ? '#059669' : '#dc2626',
+                                      fontWeight: 700,
+                                      fontSize: 10.5,
+                                    }}
+                                    title={`Started with ${formatNumber(base)} on ${client.startDate || 'start date'}`}
+                                  >
+                                    ({diff > 0 ? `+${formatNumber(diff)}` : formatNumber(diff)})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </td>
 
                       {/* Status / Stage */}
@@ -570,7 +605,8 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                   />
                   {formData.startDate && (
                     <div style={{ marginTop: 4, fontSize: 11, color: '#4338ca', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span>⏱️ Ensemble depuis :</span>
+                      <Clock size={11} />
+                      <span>Ensemble depuis :</span>
                       <span className="badge badge-active" style={{ fontSize: 10.5, padding: '1px 6px' }}>
                         {formatTenure(formData.startDate)}
                       </span>

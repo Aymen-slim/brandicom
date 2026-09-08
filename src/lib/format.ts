@@ -85,3 +85,51 @@ export function withVat(subtotal: number, vatRate = VAT_RATE): { subtotal: numbe
   const total = Math.round((subtotal + vat) * 1000) / 1000;
   return { subtotal, vat, total };
 }
+
+/**
+ * Strips URL protocols, domains, query strings and returns clean '@handle'
+ * e.g. "https://instagram.com/mybrand?igsh=123" -> "@mybrand"
+ * e.g. "https://www.tiktok.com/@mybrand?lang=en" -> "@mybrand"
+ * e.g. "mybrand" -> "@mybrand"
+ */
+export function cleanSocialHandle(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let str = raw.trim();
+  str = str.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  if (str.includes('instagram.com/')) {
+    const parts = str.split('instagram.com/');
+    str = parts[1] || '';
+  } else if (str.includes('tiktok.com/@')) {
+    const parts = str.split('tiktok.com/@');
+    str = parts[1] || '';
+  } else if (str.includes('tiktok.com/')) {
+    const parts = str.split('tiktok.com/');
+    str = parts[1] || '';
+  }
+  str = str.split('/')[0] || '';
+  str = str.replace(/^@+/, '').trim();
+  return str ? `@${str}` : '';
+}
+
+/**
+ * Robust follower input parser supporting shorthand like "15k", "1.2M", "15,400"
+ */
+export function parseFollowerInput(val: string | number | null | undefined): number | null {
+  if (val === null || val === undefined || val === '') return null;
+  if (typeof val === 'number') {
+    return Number.isFinite(val) && val >= 0 ? Math.round(val) : null;
+  }
+  const clean = String(val).trim().toLowerCase().replace(/,/g, '').replace(/\s+/g, '');
+  if (!clean) return null;
+  if (clean.endsWith('m')) {
+    const n = parseFloat(clean.slice(0, -1));
+    return isNaN(n) || n < 0 ? null : Math.round(n * 1_000_000);
+  }
+  if (clean.endsWith('k')) {
+    const n = parseFloat(clean.slice(0, -1));
+    return isNaN(n) || n < 0 ? null : Math.round(n * 1_000);
+  }
+  const n = parseInt(clean, 10);
+  return isNaN(n) || n < 0 ? null : n;
+}
+

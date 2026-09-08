@@ -61,6 +61,7 @@ export interface SocialAccountData {
   handle: string | null;
   url: string | null;
   followers: number | null;
+  initialFollowers?: number | null;
   followersUpdatedAt: string | null;
 }
 

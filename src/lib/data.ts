@@ -178,7 +178,16 @@ export function mapClientRow(row: any, opts?: { contract?: ClientContractData | 
     services: row.services || [],
     notes: row.notes,
     createdAt: row.created_at,
-    socialAccounts: (row.client_social_accounts || []).map(mapSocial),
+    socialAccounts: (row.client_social_accounts || []).map((s: any) => {
+      const base = mapSocial(s);
+      const tagPrefix = `baseline:${s.platform}:`;
+      const foundTag = (row.tags || []).find((t: string) => typeof t === 'string' && t.startsWith(tagPrefix));
+      if (foundTag) {
+        const parsed = parseInt(foundTag.slice(tagPrefix.length), 10);
+        if (!isNaN(parsed)) base.initialFollowers = parsed;
+      }
+      return base;
+    }),
     assignments: (row.client_assignments || []).map(mapAssignmentRow),
     contract: opts?.contract ?? null,
     health: opts?.health ?? null,

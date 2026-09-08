@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
-import { formatMoney, formatTenure } from '@/lib/format';
+import { formatMoney, formatTenure, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
+import { InstagramIcon, TikTokIcon } from './SocialIcons';
 import {
   MapPin,
   Edit,
@@ -12,6 +13,10 @@ import {
   Users,
   Calendar,
   X,
+  TrendingUp,
+  ExternalLink,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 
 interface ClientDetailHeaderProps {
@@ -34,6 +39,10 @@ export function ClientDetailHeader({
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Existing socials from client
+  const existingIg = (client.socialAccounts || []).find((s) => s.platform === 'instagram');
+  const existingTt = (client.socialAccounts || []).find((s) => s.platform === 'tiktok');
+
   // Form edit state
   const [name, setName] = useState(client.name);
   const [location, setLocation] = useState(client.location || '');
@@ -50,11 +59,84 @@ export function ClientDetailHeader({
     (client.assignments || []).map((a) => a.userId)
   );
 
+  // Social account inputs (stored as clean handle e.g. @brand)
+  const [igHandle, setIgHandle] = useState(cleanSocialHandle(existingIg?.handle || existingIg?.url));
+  const [igFollowers, setIgFollowers] = useState(existingIg?.followers != null ? String(existingIg.followers) : '');
+  const [igInitialFollowers, setIgInitialFollowers] = useState(
+    existingIg?.initialFollowers != null ? String(existingIg.initialFollowers) : ''
+  );
+
+  const [ttHandle, setTtHandle] = useState(cleanSocialHandle(existingTt?.handle || existingTt?.url));
+  const [ttFollowers, setTtFollowers] = useState(existingTt?.followers != null ? String(existingTt.followers) : '');
+  const [ttInitialFollowers, setTtInitialFollowers] = useState(
+    existingTt?.initialFollowers != null ? String(existingTt.initialFollowers) : ''
+  );
+
+  const [fetchingSocial, setFetchingSocial] = useState<'instagram' | 'tiktok' | null>(null);
+
+  // Sync / fetch live followers for a platform using Apify
+  const handleAutoFetchFollowers = async (platform: 'instagram' | 'tiktok') => {
+    const raw = platform === 'instagram' ? igHandle : ttHandle;
+    const clean = cleanSocialHandle(raw);
+    if (!clean) {
+      alert(`Please enter an ${platform === 'instagram' ? 'Instagram' : 'TikTok'} username first.`);
+      return;
+    }
+    setFetchingSocial(platform);
+    try {
+      const res = await fetch('/api/social/fetch-followers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlOrHandle: clean, platform }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch followers');
+      if (platform === 'instagram') {
+        setIgFollowers(String(data.followers));
+        if (data.handle) setIgHandle(cleanSocialHandle(data.handle));
+        if (!igInitialFollowers) setIgInitialFollowers(String(data.followers));
+      } else {
+        setTtFollowers(String(data.followers));
+        if (data.handle) setTtHandle(cleanSocialHandle(data.handle));
+        if (!ttInitialFollowers) setTtInitialFollowers(String(data.followers));
+      }
+    } catch (err: any) {
+      alert(`Auto-fetch error: ${err.message}`);
+    } finally {
+      setFetchingSocial(null);
+    }
+  };
+
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
 
     try {
+      const parsedIgFollowers = parseFollowerInput(igFollowers);
+      const parsedIgInitial = parseFollowerInput(igInitialFollowers);
+      const cleanIg = cleanSocialHandle(igHandle);
+
+      const parsedTtFollowers = parseFollowerInput(ttFollowers);
+      const parsedTtInitial = parseFollowerInput(ttInitialFollowers);
+      const cleanTt = cleanSocialHandle(ttHandle);
+
+      const socialAccountsPayload = [
+        {
+          platform: 'instagram' as const,
+          handle: cleanIg || null,
+          url: cleanIg ? `https://instagram.com/${cleanIg.replace(/^@/, '')}` : null,
+          followers: parsedIgFollowers,
+          initialFollowers: parsedIgInitial,
+        },
+        {
+          platform: 'tiktok' as const,
+          handle: cleanTt || null,
+          url: cleanTt ? `https://tiktok.com/@${cleanTt.replace(/^@/, '')}` : null,
+          followers: parsedTtFollowers,
+          initialFollowers: parsedTtInitial,
+        },
+      ].filter((s) => s.handle || s.followers != null || s.initialFollowers != null);
+
       const res = await fetch(`/api/clients/${client.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -70,6 +152,7 @@ export function ClientDetailHeader({
           contactEmail: contactEmail.trim() || null,
           contactPhone: contactPhone.trim() || null,
           startDate: startDate || null,
+          socialAccounts: socialAccountsPayload,
           contract: isAdmin
             ? { monthlyFee: monthlyFee ? parseFloat(monthlyFee) : null, contractType: 'retainer' }
             : undefined,
@@ -243,6 +326,103 @@ export function ClientDetailHeader({
                 )}
               </div>
             </div>
+            {/* Social Accounts & Follower Growth Badges */}
+            {(existingIg?.handle || existingTt?.handle) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                {existingIg && (existingIg.handle || existingIg.url) && (
+                  <a
+                    href={existingIg.url || `https://instagram.com/${cleanSocialHandle(existingIg.handle).replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '3px 10px',
+                      borderRadius: 6,
+                      backgroundColor: '#fdf2f8',
+                      color: '#9d174d',
+                      border: '1px solid #fbcfe8',
+                      textDecoration: 'none',
+                    }}
+                    title="Open Instagram Profile"
+                  >
+                    <InstagramIcon size={13} color="#be185d" />
+                    <span>{cleanSocialHandle(existingIg.handle) || 'Instagram'}</span>
+                    {existingIg.followers != null && (
+                      <span style={{ color: '#be185d', fontWeight: 700 }}>
+                        · {formatNumber(existingIg.followers)}
+                      </span>
+                    )}
+                  </a>
+                )}
+
+                {existingTt && (existingTt.handle || existingTt.url) && (
+                  <a
+                    href={existingTt.url || `https://tiktok.com/@${cleanSocialHandle(existingTt.handle).replace(/^@/, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: '3px 10px',
+                      borderRadius: 6,
+                      backgroundColor: '#f8fafc',
+                      color: '#0f172a',
+                      border: '1px solid #e2e8f0',
+                      textDecoration: 'none',
+                    }}
+                    title="Open TikTok Profile"
+                  >
+                    <TikTokIcon size={13} color="#0f172a" />
+                    <span>{cleanSocialHandle(existingTt.handle) || 'TikTok'}</span>
+                    {existingTt.followers != null && (
+                      <span style={{ color: '#0f172a', fontWeight: 700 }}>
+                        · {formatNumber(existingTt.followers)}
+                      </span>
+                    )}
+                  </a>
+                )}
+
+                {/* Follower Growth Comparison Pill */}
+                {(() => {
+                  const cur = (existingIg?.followers || 0) + (existingTt?.followers || 0);
+                  const base = (existingIg?.initialFollowers || 0) + (existingTt?.initialFollowers || 0);
+                  if (base > 0 && cur > 0) {
+                    const diff = cur - base;
+                    const pct = (diff / base) * 100;
+                    return (
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: '3px 10px',
+                          borderRadius: 6,
+                          backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                          color: diff >= 0 ? '#047857' : '#b91c1c',
+                          border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                        }}
+                        title={`Started with ${formatNumber(base)} followers on ${client.startDate || 'start date'} → Currently ${formatNumber(cur)}`}
+                      >
+                        <TrendingUp size={13} />
+                        <span>
+                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} followers ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Services Pills */}
@@ -414,8 +594,8 @@ export function ClientDetailHeader({
                   <label style={{ fontSize: 11, fontWeight: 600, display: 'block', marginBottom: 4 }}>Client Start date</label>
                   <input type="date" className="input-field" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
                   {startDate && (
-                    <div style={{ marginTop: 3, fontSize: 10.5, color: '#4338ca', fontWeight: 600 }}>
-                      ⏱️ {formatTenure(startDate)}
+                    <div style={{ marginTop: 3, fontSize: 10.5, color: '#4338ca', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+                      <Calendar size={11} /> {formatTenure(startDate)}
                     </div>
                   )}
                 </div>
@@ -428,6 +608,351 @@ export function ClientDetailHeader({
                 <input className="input-field" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Email" />
                 <input className="input-field" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="Phone" />
               </div>
+
+              {/* Social Channels & Follower Tracking Section */}
+              <div
+                style={{
+                  padding: '16px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <TrendingUp size={15} color="#4f46e5" />
+                    <strong style={{ fontSize: '13px', color: '#0f172a' }}>
+                      Social Channels & Audience Growth
+                    </strong>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>
+                    Track before (starting baseline) vs after (current count)
+                  </span>
+                </div>
+
+                {/* Instagram Section */}
+                <div
+                  style={{
+                    backgroundColor: '#ffffff',
+                    padding: '14px',
+                    borderRadius: '8px',
+                    border: '1px solid #fbcfe8',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <InstagramIcon size={15} color="#be185d" />
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#9d174d' }}>
+                        Instagram
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoFetchFollowers('instagram')}
+                      disabled={fetchingSocial === 'instagram' || !igHandle.trim()}
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '3px 9px',
+                        borderRadius: '4px',
+                        backgroundColor: '#fdf2f8',
+                        color: '#be185d',
+                        border: '1px solid #fbcfe8',
+                        cursor: fetchingSocial === 'instagram' || !igHandle.trim() ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                      title="Fetch live follower count via Apify"
+                    >
+                      <RefreshCw size={11} className={fetchingSocial === 'instagram' ? 'animate-spin' : ''} />
+                      {fetchingSocial === 'instagram' ? 'Fetching...' : 'Auto-fetch live'}
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 4, fontWeight: 600 }}>
+                      Account Username
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="@username"
+                      value={igHandle}
+                      onChange={(e) => setIgHandle(cleanSocialHandle(e.target.value))}
+                      className="input-field"
+                      style={{ fontSize: '12.5px' }}
+                    />
+                  </div>
+
+                  {/* Before & After Follower Inputs */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
+                          Before (Starting Baseline)
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>
+                          {startDate ? startDate : 'Contract start'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. 10k or 10,000"
+                        value={igInitialFollowers}
+                        onChange={(e) => setIgInitialFollowers(e.target.value)}
+                        className="input-field"
+                        style={{ fontSize: '13px', fontWeight: 600 }}
+                      />
+                      <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
+                        {parseFollowerInput(igInitialFollowers) != null
+                          ? `= ${formatNumber(parseFollowerInput(igInitialFollowers))} followers`
+                          : 'Enter starting baseline'}
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
+                          After (Current Live)
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#047857', fontWeight: 600 }}>
+                          Live count
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. 18.5k or 18,500"
+                        value={igFollowers}
+                        onChange={(e) => setIgFollowers(e.target.value)}
+                        className="input-field"
+                        style={{ fontSize: '13px', fontWeight: 700, color: '#9d174d' }}
+                      />
+                      <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
+                        {parseFollowerInput(igFollowers) != null
+                          ? `= ${formatNumber(parseFollowerInput(igFollowers))} followers`
+                          : 'Enter current count or auto-fetch'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Growth Pill for Instagram */}
+                  {(() => {
+                    const cur = parseFollowerInput(igFollowers);
+                    const base = parseFollowerInput(igInitialFollowers);
+                    if (base != null && cur != null) {
+                      const diff = cur - base;
+                      const pct = base > 0 ? (diff / base) * 100 : 0;
+                      return (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: '6px 10px',
+                            borderRadius: '5px',
+                            backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                            border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                            fontSize: '11.5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <span style={{ color: diff >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
+                            Net Instagram Growth:
+                          </span>
+                          <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
+                            {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                {/* TikTok Section */}
+                <div
+                  style={{
+                    backgroundColor: '#ffffff',
+                    padding: '14px',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <TikTokIcon size={15} color="#0f172a" />
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}>
+                        TikTok
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleAutoFetchFollowers('tiktok')}
+                      disabled={fetchingSocial === 'tiktok' || !ttHandle.trim()}
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        padding: '3px 9px',
+                        borderRadius: '4px',
+                        backgroundColor: '#f8fafc',
+                        color: '#0f172a',
+                        border: '1px solid #cbd5e1',
+                        cursor: fetchingSocial === 'tiktok' || !ttHandle.trim() ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                      title="Fetch live follower count via Apify"
+                    >
+                      <RefreshCw size={11} className={fetchingSocial === 'tiktok' ? 'animate-spin' : ''} />
+                      {fetchingSocial === 'tiktok' ? 'Fetching...' : 'Auto-fetch live'}
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 4, fontWeight: 600 }}>
+                      Account Username
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="@username"
+                      value={ttHandle}
+                      onChange={(e) => setTtHandle(cleanSocialHandle(e.target.value))}
+                      className="input-field"
+                      style={{ fontSize: '12.5px' }}
+                    />
+                  </div>
+
+                  {/* Before & After Follower Inputs */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
+                          Before (Starting Baseline)
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#64748b' }}>
+                          {startDate ? startDate : 'Contract start'}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. 5k or 5,000"
+                        value={ttInitialFollowers}
+                        onChange={(e) => setTtInitialFollowers(e.target.value)}
+                        className="input-field"
+                        style={{ fontSize: '13px', fontWeight: 600 }}
+                      />
+                      <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
+                        {parseFollowerInput(ttInitialFollowers) != null
+                          ? `= ${formatNumber(parseFollowerInput(ttInitialFollowers))} followers`
+                          : 'Enter starting baseline'}
+                      </div>
+                    </div>
+
+                    <div style={{ backgroundColor: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
+                          After (Current Live)
+                        </span>
+                        <span style={{ fontSize: '10px', color: '#047857', fontWeight: 600 }}>
+                          Live count
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="e.g. 15k or 15,000"
+                        value={ttFollowers}
+                        onChange={(e) => setTtFollowers(e.target.value)}
+                        className="input-field"
+                        style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a' }}
+                      />
+                      <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
+                        {parseFollowerInput(ttFollowers) != null
+                          ? `= ${formatNumber(parseFollowerInput(ttFollowers))} followers`
+                          : 'Enter current count or auto-fetch'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Growth Pill for TikTok */}
+                  {(() => {
+                    const cur = parseFollowerInput(ttFollowers);
+                    const base = parseFollowerInput(ttInitialFollowers);
+                    if (base != null && cur != null) {
+                      const diff = cur - base;
+                      const pct = base > 0 ? (diff / base) * 100 : 0;
+                      return (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: '6px 10px',
+                            borderRadius: '5px',
+                            backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                            border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                            fontSize: '11.5px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <span style={{ color: diff >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
+                            Net TikTok Growth:
+                          </span>
+                          <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
+                            {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                {/* Overall Audience Growth Comparison Banner */}
+                {(() => {
+                  const curIg = parseFollowerInput(igFollowers) || 0;
+                  const curTt = parseFollowerInput(ttFollowers) || 0;
+                  const curTotal = curIg + curTt;
+
+                  const baseIg = parseFollowerInput(igInitialFollowers) || 0;
+                  const baseTt = parseFollowerInput(ttInitialFollowers) || 0;
+                  const baseTotal = baseIg + baseTt;
+
+                  if (baseTotal > 0 && curTotal > 0) {
+                    const diff = curTotal - baseTotal;
+                    const pct = (diff / baseTotal) * 100;
+                    return (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                          border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                          fontSize: '12px',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: diff >= 0 ? '#065f46' : '#991b1b' }}>
+                          <TrendingUp size={14} />
+                          <span>
+                            <strong>Combined Audience:</strong> Started with {formatNumber(baseTotal)} → Currently {formatNumber(curTotal)}
+                          </span>
+                        </div>
+                        <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
+                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
               <div>
                 <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
                   Services (comma separated)

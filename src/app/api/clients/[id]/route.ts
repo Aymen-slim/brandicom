@@ -121,6 +121,16 @@ export async function PATCH(
             followers: s.followers != null ? Number(s.followers) : null,
           }))
       );
+
+      // Persist baseline follower counts into client tags
+      const currentTags = (updated.tags || []).filter((t: string) => typeof t === 'string' && !t.startsWith('baseline:'));
+      for (const s of socialAccounts) {
+        if (s && s.initialFollowers != null && !isNaN(Number(s.initialFollowers))) {
+          currentTags.push(`baseline:${s.platform}:${Number(s.initialFollowers)}`);
+        }
+      }
+      const supabase = createServerSupabaseClient();
+      await supabase.from('clients').update({ tags: currentTags }).eq('id', clientId);
     }
 
     if (isAdmin(user) && contract && typeof contract === 'object') {

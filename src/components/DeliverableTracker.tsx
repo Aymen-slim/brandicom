@@ -17,7 +17,13 @@ import {
   Video,
   Layers,
   Sparkles,
+  RefreshCw,
+  Link2,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react';
+import { InstagramIcon, TikTokIcon } from '@/components/SocialIcons';
 
 interface DeliverableTrackerProps {
   clientId: string;
@@ -40,6 +46,12 @@ export function DeliverableTracker({
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
+  // Sync state & inline link editing state
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [editingLinkVal, setEditingLinkVal] = useState<string>('');
+  const [syncNotification, setSyncNotification] = useState<{ id: string; msg: string; isError?: boolean } | null>(null);
+
   // Form state for new deliverable
   const [idea, setIdea] = useState('');
   const [format, setFormat] = useState<DeliverableFormat>('reel');
@@ -51,6 +63,80 @@ export function DeliverableTracker({
   const [creatorId, setCreatorId] = useState('');
   const [filmed, setFilmed] = useState(false);
   const [status, setStatus] = useState<DeliverableStatus>('idea');
+
+  // Sync engagement metrics from Apify
+  const handleSyncMetrics = async (id: string) => {
+    setSyncingId(id);
+    setSyncNotification(null);
+    try {
+      const res = await fetch(`/api/deliverables/${id}/sync-metrics`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to sync stats via Apify');
+      }
+
+      if (data.deliverable) {
+        setDeliverables((prev) =>
+          prev.map((item) => (item.id === id ? data.deliverable : item))
+        );
+      }
+
+      const views = data.scraped?.views?.toLocaleString() ?? '0';
+      const likes = data.scraped?.likes?.toLocaleString() ?? '0';
+      const comments = data.scraped?.comments?.toLocaleString() ?? '0';
+      const platformName = data.scraped?.platform === 'instagram' ? 'Instagram' : data.scraped?.platform === 'tiktok' ? 'TikTok' : 'Apify';
+
+      setSyncNotification({
+        id,
+        msg: `Synced from ${platformName}: ${views} views · ${likes} likes · ${comments} comments`,
+      });
+      setTimeout(() => setSyncNotification(null), 6000);
+
+      if (onUpdate) onUpdate();
+    } catch (err: any) {
+      console.error('Failed to sync metrics:', err);
+      setSyncNotification({
+        id,
+        msg: err.message || 'Sync failed. Please check the URL and your Apify API token.',
+        isError: true,
+      });
+      setTimeout(() => setSyncNotification(null), 8000);
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  // Direct save/update deliverable link
+  const handleSaveLink = async (id: string, newLink: string) => {
+    const trimmed = newLink.trim();
+    setDeliverables((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, link: trimmed || null } : item))
+    );
+    setEditingLinkId(null);
+
+    try {
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: trimmed || null }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setDeliverables((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+        );
+        if (onUpdate) onUpdate();
+        // If a valid link was attached, automatically trigger metric sync!
+        if (trimmed) {
+          handleSyncMetrics(id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update deliverable link:', err);
+    }
+  };
 
   // Toggle filmed or published status
   const handleToggle = async (id: string, field: 'filmed' | 'published', currentValue: boolean) => {
@@ -246,6 +332,9 @@ export function DeliverableTracker({
         setStatus('idea');
         setIsAdding(false);
         if (onUpdate) onUpdate();
+        if (created.link) {
+          handleSyncMetrics(created.id);
+        }
       }
     } catch (err) {
       console.error('Failed to create deliverable:', err);
@@ -1014,26 +1103,164 @@ export function DeliverableTracker({
                     {/* Idea / Concept */}
                     <td>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '13px' }}>{d.idea}</div>
-                      {d.link ? (
-                        <a
-                          href={d.link}
-                          target="_blank"
-                          rel="noreferrer"
+
+                      {/* Inline Link Editor or Display */}
+                      {editingLinkId === d.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                          <input
+                            type="url"
+                            placeholder="Paste Instagram or TikTok link..."
+                            value={editingLinkVal}
+                            onChange={(e) => setEditingLinkVal(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveLink(d.id, editingLinkVal);
+                              if (e.key === 'Escape') setEditingLinkId(null);
+                            }}
+                            autoFocus
+                            style={{
+                              fontSize: '11px',
+                              padding: '2px 6px',
+                              border: '1px solid #2563eb',
+                              borderRadius: '4px',
+                              width: '210px',
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleSaveLink(d.id, editingLinkVal)}
+                            style={{
+                              border: 'none',
+                              background: '#2563eb',
+                              color: '#fff',
+                              borderRadius: '4px',
+                              padding: '2px 5px',
+                              cursor: 'pointer',
+                            }}
+                            title="Save & Sync"
+                          >
+                            <Check size={11} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingLinkId(null)}
+                            style={{
+                              border: 'none',
+                              background: '#f3f4f6',
+                              color: '#6b7280',
+                              borderRadius: '4px',
+                              padding: '2px 5px',
+                              cursor: 'pointer',
+                            }}
+                            title="Cancel"
+                          >
+                            <X size={11} />
+                          </button>
+                        </div>
+                      ) : d.link ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: '3px', flexWrap: 'wrap' }}>
+                          <a
+                            href={d.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              fontSize: '11px',
+                              color: '#4f46e5',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              textDecoration: 'none',
+                              fontWeight: 500,
+                            }}
+                          >
+                            <ExternalLink size={10} />
+                            View Post
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSyncMetrics(d.id)}
+                            disabled={syncingId === d.id}
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              color: '#1d4ed8',
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '4px',
+                              padding: '1.5px 6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              cursor: syncingId === d.id ? 'not-allowed' : 'pointer',
+                            }}
+                            title="Sync views, likes & comments via Apify"
+                          >
+                            <RefreshCw size={10} className={syncingId === d.id ? 'animate-spin' : ''} />
+                            {syncingId === d.id ? 'Syncing…' : 'Sync stats'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLinkId(d.id);
+                              setEditingLinkVal(d.link || '');
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              color: '#9ca3af',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                            }}
+                            title="Edit URL"
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ marginTop: '3px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLinkId(d.id);
+                              setEditingLinkVal('');
+                            }}
+                            style={{
+                              fontSize: '10.5px',
+                              color: '#6b7280',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              padding: 0,
+                            }}
+                          >
+                            <Link2 size={10} />
+                            <span>+ Attach live link</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Sync Notification Banner */}
+                      {syncNotification && syncNotification.id === d.id && (
+                        <div
                           style={{
-                            fontSize: '11px',
-                            color: '#4f46e5',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '3px',
-                            marginTop: '3px',
-                            textDecoration: 'none',
+                            marginTop: 4,
+                            fontSize: '10.5px',
+                            fontWeight: 600,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: syncNotification.isError ? '#fef2f2' : '#ecfdf5',
+                            color: syncNotification.isError ? '#dc2626' : '#059669',
+                            border: `1px solid ${syncNotification.isError ? '#fecaca' : '#a7f3d0'}`,
+                            maxWidth: '280px',
                           }}
                         >
-                          <ExternalLink size={10} />
-                          View Live Post
-                        </a>
-                      ) : (
-                        <span style={{ fontSize: '10.5px', color: '#9ca3af' }}>No link attached</span>
+                          {syncNotification.msg}
+                        </div>
                       )}
                     </td>
 
@@ -1086,16 +1313,21 @@ export function DeliverableTracker({
                         {d.platform && (
                           <span
                             style={{
-                              padding: '1.5px 7px',
+                              padding: '2px 7px',
                               borderRadius: '4px',
                               fontSize: '11px',
                               fontWeight: 600,
                               textTransform: 'capitalize',
                               backgroundColor: platformPills[d.platform]?.bg || '#f3f4f6',
                               color: platformPills[d.platform]?.text || '#374151',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
                             }}
                           >
-                            {d.platform}
+                            {d.platform === 'instagram' && <InstagramIcon size={12} color="#db2777" />}
+                            {d.platform === 'tiktok' && <TikTokIcon size={12} color="#0891b2" />}
+                            <span>{d.platform}</span>
                           </span>
                         )}
                         {d.format && (
@@ -1155,9 +1387,71 @@ export function DeliverableTracker({
                             <span>{d.results}</span>
                           </div>
                         ) : d.latestMetrics ? (
-                          <div style={{ fontSize: '11px', color: '#4b5563' }}>
-                            {d.latestMetrics.views.toLocaleString()} views · {d.latestMetrics.likes.toLocaleString()} likes
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: '11px', color: '#1f2937' }}>
+                              <span style={{ fontWeight: 600 }}>{d.latestMetrics.views.toLocaleString()}</span> views ·{' '}
+                              <span style={{ fontWeight: 600 }}>{d.latestMetrics.likes.toLocaleString()}</span> likes
+                              {d.latestMetrics.comments > 0 && (
+                                <> · <span>{d.latestMetrics.comments.toLocaleString()}</span> comments</>
+                              )}
+                            </div>
+                            {d.latestMetrics.source === 'api' && (
+                              <span
+                                style={{
+                                  fontSize: '9px',
+                                  fontWeight: 700,
+                                  color: '#2563eb',
+                                  backgroundColor: '#eff6ff',
+                                  border: '1px solid #bfdbfe',
+                                  borderRadius: '3px',
+                                  padding: '1px 4px',
+                                }}
+                                title="Auto-synced from Apify"
+                              >
+                                API
+                              </span>
+                            )}
+                            {d.link && (
+                              <button
+                                type="button"
+                                onClick={() => handleSyncMetrics(d.id)}
+                                disabled={syncingId === d.id}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  padding: 0,
+                                  color: '#6b7280',
+                                  cursor: syncingId === d.id ? 'not-allowed' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                }}
+                                title="Refresh latest stats"
+                              >
+                                <RefreshCw size={10} className={syncingId === d.id ? 'animate-spin' : ''} />
+                              </button>
+                            )}
                           </div>
+                        ) : d.link ? (
+                          <button
+                            type="button"
+                            onClick={() => handleSyncMetrics(d.id)}
+                            disabled={syncingId === d.id}
+                            style={{
+                              fontSize: '10.5px',
+                              color: '#2563eb',
+                              background: '#eff6ff',
+                              border: '1px dashed #93c5fd',
+                              borderRadius: '4px',
+                              padding: '2px 8px',
+                              cursor: syncingId === d.id ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                            }}
+                          >
+                            <RefreshCw size={10} className={syncingId === d.id ? 'animate-spin' : ''} />
+                            <span>{syncingId === d.id ? 'Fetching…' : 'Fetch Stats'}</span>
+                          </button>
                         ) : (
                           <span style={{ color: '#9ca3af', fontSize: '11px' }}>—</span>
                         )}

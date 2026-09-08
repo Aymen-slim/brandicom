@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from './supabase/server';
-import { EngagementSummary, PostMetricsData } from '@/types';
+import { EngagementSummary, PostMetricsData, MetricsSource } from '@/types';
 import { periodRange } from './period';
 
 export function engagementRate(m: { likes: number; comments: number; shares: number; saves: number; reach: number }): number {
@@ -24,7 +24,10 @@ function emptySummary(): EngagementSummary {
 
 export async function addPostMetrics(
   deliverableId: string,
-  metrics: Partial<Omit<PostMetricsData, 'id' | 'deliverableId' | 'capturedAt' | 'source'>> & { note?: string | null }
+  metrics: Partial<Omit<PostMetricsData, 'id' | 'deliverableId' | 'capturedAt' | 'source'>> & {
+    note?: string | null;
+    source?: MetricsSource;
+  }
 ) {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
@@ -40,7 +43,7 @@ export async function addPostMetrics(
       impressions: Number(metrics.impressions || 0),
       link_clicks: Number(metrics.linkClicks || 0),
       followers_gained: Number(metrics.followersGained || 0),
-      source: 'manual',
+      source: metrics.source || 'manual',
       note: metrics.note || null,
     })
     .select()
