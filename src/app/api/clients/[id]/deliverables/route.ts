@@ -14,6 +14,7 @@ import {
   getDeliverableSelect,
   logActivity,
 } from '@/lib/data';
+import { serializeDeliverableLinks } from '@/lib/deliverables';
 
 export async function GET(
   _request: NextRequest,
@@ -69,6 +70,8 @@ export async function POST(
       filmingDate,
       scheduledAt,
       creatorId,
+      instagramLink,
+      tiktokLink,
     } = body;
 
     if (!idea || typeof idea !== 'string' || idea.trim() === '') {
@@ -108,6 +111,19 @@ export async function POST(
     const supabase = createServerSupabaseClient();
     const supportsFilmingDate = await isFilmingDateSupported(supabase);
 
+    const isBothPlatforms = platform === 'both' || Boolean(instagramLink && tiktokLink);
+    const dbPlatform = isBothPlatforms
+      ? 'instagram'
+      : platform && isPlatform(platform)
+      ? platform
+      : null;
+    const serializedLink = serializeDeliverableLinks({
+      instagramLink,
+      tiktokLink,
+      link,
+      platform,
+    });
+
     const insertPayload: Record<string, unknown> = {
       client_id: clientId,
       idea: idea.trim(),
@@ -117,9 +133,9 @@ export async function POST(
       status: resolvedStatus,
       filmed: isFilmed,
       published: isPublished,
-      link: typeof link === 'string' && link.trim() !== '' ? link.trim() : null,
+      link: serializedLink,
       format: format && isDeliverableFormat(format) ? format : null,
-      platform: platform && isPlatform(platform) ? platform : null,
+      platform: dbPlatform,
       results: typeof results === 'string' && results.trim() !== '' ? results.trim() : null,
       publish_date: publishDateOnly,
       scheduled_at: calculatedScheduledAt,

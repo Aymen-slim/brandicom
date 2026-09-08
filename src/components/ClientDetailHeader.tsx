@@ -72,6 +72,23 @@ export function ClientDetailHeader({
     existingTt?.initialFollowers != null ? String(existingTt.initialFollowers) : ''
   );
 
+  // Monthly content goals state
+  const [monthlyReels, setMonthlyReels] = useState(
+    client.monthlyGoals?.reels != null ? String(client.monthlyGoals.reels) : ''
+  );
+  const [monthlyPosts, setMonthlyPosts] = useState(
+    client.monthlyGoals?.posts != null ? String(client.monthlyGoals.posts) : ''
+  );
+  const [monthlyStories, setMonthlyStories] = useState(
+    client.monthlyGoals?.stories != null ? String(client.monthlyGoals.stories) : ''
+  );
+  const [monthlyOther, setMonthlyOther] = useState(
+    client.monthlyGoals?.other != null ? String(client.monthlyGoals.other) : ''
+  );
+  const [monthlyOtherLabel, setMonthlyOtherLabel] = useState(
+    client.monthlyGoals?.otherLabel || 'TikToks / UGC'
+  );
+
   const [fetchingSocial, setFetchingSocial] = useState<'instagram' | 'tiktok' | null>(null);
 
   // Sync / fetch live followers for a platform using Apify
@@ -153,6 +170,19 @@ export function ClientDetailHeader({
           contactPhone: contactPhone.trim() || null,
           startDate: startDate || null,
           socialAccounts: socialAccountsPayload,
+          monthlyGoals: {
+            selectedFormats: [
+              parseInt(monthlyReels, 10) > 0 ? 'reels' : null,
+              parseInt(monthlyPosts, 10) > 0 ? 'posts' : null,
+              parseInt(monthlyStories, 10) > 0 ? 'stories' : null,
+              parseInt(monthlyOther, 10) > 0 ? 'other' : null,
+            ].filter(Boolean) as string[],
+            reels: Math.max(0, parseInt(monthlyReels, 10) || 0),
+            posts: Math.max(0, parseInt(monthlyPosts, 10) || 0),
+            stories: Math.max(0, parseInt(monthlyStories, 10) || 0),
+            other: Math.max(0, parseInt(monthlyOther, 10) || 0),
+            otherLabel: monthlyOtherLabel.trim() || 'Other Content',
+          },
           contract: isAdmin
             ? { monthlyFee: monthlyFee ? parseFloat(monthlyFee) : null, contractType: 'retainer' }
             : undefined,
@@ -463,6 +493,45 @@ export function ClientDetailHeader({
             >
               {client.contract?.monthlyFee != null ? formatMoney(client.contract.monthlyFee) : '—'}
             </div>
+            {(() => {
+              const g = client.monthlyGoals;
+              if (!g) return null;
+              const items: string[] = [];
+              if ((!g.selectedFormats || g.selectedFormats.includes('reels')) && (g.reels ?? 0) > 0) {
+                items.push(`${g.reels}R`);
+              }
+              if ((!g.selectedFormats || g.selectedFormats.includes('posts')) && (g.posts ?? 0) > 0) {
+                items.push(`${g.posts}P`);
+              }
+              if ((!g.selectedFormats || g.selectedFormats.includes('stories')) && (g.stories ?? 0) > 0) {
+                items.push(`${g.stories}S`);
+              }
+              if ((!g.selectedFormats || g.selectedFormats.includes('other')) && (g.other ?? 0) > 0) {
+                items.push(`${g.other} ${g.otherLabel || 'Other'}`);
+              }
+              if (items.length === 0) return null;
+
+              return (
+                <div
+                  style={{
+                    marginTop: 4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 11,
+                    background: '#f1f5f9',
+                    color: '#334155',
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    fontWeight: 600,
+                  }}
+                  title="Monthly Contract Deliverables Quota"
+                >
+                  <Sparkles size={11} color="#6366f1" />
+                  <span>{items.join(' · ')} / mo</span>
+                </div>
+              );
+            })()}
           </div>
           )}
 
@@ -951,6 +1020,106 @@ export function ClientDetailHeader({
                   }
                   return null;
                 })()}
+              </div>
+
+              {/* Monthly Content Goals Section */}
+              <div
+                style={{
+                  padding: '16px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={14} color="#6366f1" />
+                    <strong style={{ fontSize: '13px', color: '#0f172a' }}>
+                      Monthly Content Deliverables (Contract Quota)
+                    </strong>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#64748b' }}>
+                    Leave blank or 0 to hide from tracker
+                  </span>
+                </div>
+
+                <div className="grid-responsive-3" style={{ gap: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
+                      🎬 Reels / month
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 12"
+                      value={monthlyReels}
+                      onChange={(e) => setMonthlyReels(e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
+                      📸 Posts / month (Photos/Carousels)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 4"
+                      value={monthlyPosts}
+                      onChange={(e) => setMonthlyPosts(e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
+                      📱 Stories / month
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 20"
+                      value={monthlyStories}
+                      onChange={(e) => setMonthlyStories(e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+
+                {/* Other / Custom Format in Edit Modal */}
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
+                      ⚡ Custom Format Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. TikToks, UGC Videos, Graphics"
+                      value={monthlyOtherLabel}
+                      onChange={(e) => setMonthlyOtherLabel(e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
+                      Custom Target / month
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 8"
+                      value={monthlyOther}
+                      onChange={(e) => setMonthlyOther(e.target.value)}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>

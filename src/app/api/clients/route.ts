@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enforceAuth, isAdmin } from '@/lib/permissions';
 import { fetchClients, attachClientCounts, createClient, isClientStatus } from '@/lib/data';
+import { packClientMonthlyGoals } from '@/lib/clientGoals';
 
 export async function GET(request: NextRequest) {
   const { user, error } = await enforceAuth();
@@ -71,6 +72,11 @@ export async function POST(request: NextRequest) {
         ? services.split(',').map((s: string) => s.trim()).filter(Boolean)
         : [];
 
+    let initialTags = Array.isArray(tags) ? tags : [];
+    if (body.monthlyGoals && typeof body.monthlyGoals === 'object') {
+      initialTags = packClientMonthlyGoals(initialTags, body.monthlyGoals);
+    }
+
     const newClient = await createClient(
       {
         name,
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
         contactPhone,
         startDate,
         leadSource,
-        tags: Array.isArray(tags) ? tags : undefined,
+        tags: initialTags.length > 0 ? initialTags : undefined,
       },
       userIdsToAssign,
       isAdmin(user) ? { monthlyFee: monthlyFee ? Number(monthlyFee) : null, contractType } : null,

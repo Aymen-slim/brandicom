@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { enforceAuth, canAccessClient } from '@/lib/permissions';
-import { fetchPostEngagement } from '@/lib/apify';
+import { fetchPostEngagement, ScrapedSocialMetrics } from '@/lib/apify';
 import { addPostMetrics } from '@/lib/engagement';
+import { parseDeliverableLinks } from '@/lib/deliverables';
 import {
   mapDeliverableRow,
   getDeliverableSelect,
@@ -40,15 +41,74 @@ export async function POST(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    if (!del.link || !del.link.trim()) {
+    const parsedLinks = parseDeliverableLinks(del.link, del.platform);
+    const { instagramLink, tiktokLink } = parsedLinks;
+
+    if (!instagramLink && !tiktokLink && !parsedLinks.primaryLink) {
       return NextResponse.json(
         { error: 'No live link found for this deliverable. Please attach an Instagram or TikTok URL first.' },
         { status: 400 }
       );
     }
 
-    // 2. Fetch engagement metrics from Apify (Actor shu8hvrXbJbY3Eb9W for IG, clockworks for TikTok)
-    const scraped = await fetchPostEngagement(del.link);
+    // 2. Fetch engagement metrics from Apify
+    let scraped: ScrapedSocialMetrics;
+    let breakdown: {
+      instagram?: ScrapedSocialMetrics;
+      tiktok?: ScrapedSocialMetrics;
+    } | null = null;
+    let noteStr = 'Synced via Apify';
+
+    if (instagramLink && tiktokLink) {
+      // Both platforms present: fetch both concurrently!
+      const [igResult, ttResult] = await Promise.allSettled([
+        fetchPostEngagement(instagramLink),
+        fetchPostEngagement(tiktokLink),
+      ]);
+
+      const igScraped = igResult.status === 'fulfilled' ? igResult.value : null;
+      const ttScraped = ttResult.status === 'fulfilled' ? ttResult.value : null;
+
+      if (!igScraped && !ttScraped) {
+        const igErr = igResult.status === 'rejected' ? igResult.reason?.message : 'IG failed';
+        const ttErr = ttResult.status === 'rejected' ? ttResult.reason?.message : 'TikTok failed';
+        throw new Error(`Failed to sync stats: Instagram (${igErr}) · TikTok (${ttErr})`);
+      }
+
+      breakdown = {
+        ...(igScraped ? { instagram: igScraped } : {}),
+        ...(ttScraped ? { tiktok: ttScraped } : {}),
+      };
+
+      const totalViews = (igScraped?.views || 0) + (ttScraped?.views || 0);
+      const totalLikes = (igScraped?.likes || 0) + (ttScraped?.likes || 0);
+      const totalComments = (igScraped?.comments || 0) + (ttScraped?.comments || 0);
+      const totalShares = (igScraped?.shares || 0) + (ttScraped?.shares || 0);
+      const thumbnailUrl = igScraped?.thumbnailUrl || ttScraped?.thumbnailUrl || del.thumbnail_url;
+
+      scraped = {
+        views: totalViews,
+        likes: totalLikes,
+        comments: totalComments,
+        shares: totalShares,
+        thumbnailUrl,
+        caption: igScraped?.caption || ttScraped?.caption || null,
+        platform: 'both' as any,
+      };
+
+      const noteParts: string[] = [];
+      if (igScraped) noteParts.push(`Instagram: ${igScraped.views.toLocaleString()} views, ${igScraped.likes.toLocaleString()} likes`);
+      if (ttScraped) noteParts.push(`TikTok: ${ttScraped.views.toLocaleString()} views, ${ttScraped.likes.toLocaleString()} likes`);
+      noteStr = `Synced via Apify (${noteParts.join(' · ')})`;
+    } else {
+      // Single platform
+      const targetUrl = instagramLink || tiktokLink || parsedLinks.primaryLink!;
+      scraped = await fetchPostEngagement(targetUrl);
+      noteStr = `Synced via Apify (${scraped.platform})`;
+      breakdown = {
+        [scraped.platform]: scraped,
+      };
+    }
 
     // 3. Save snapshot to post_metrics with source: 'api'
     const metricRecord = await addPostMetrics(deliverableId, {
@@ -57,7 +117,7 @@ export async function POST(
       comments: scraped.comments,
       shares: scraped.shares,
       source: 'api',
-      note: `Synced via Apify (${scraped.platform})`,
+      note: noteStr,
     });
 
     // 4. Mark deliverable as published and update metadata so it appears on Client Engagement page
@@ -71,8 +131,9 @@ export async function POST(
     if (!del.thumbnail_url && scraped.thumbnailUrl) {
       updates.thumbnail_url = scraped.thumbnailUrl;
     }
-    if (!del.platform && (scraped.platform === 'instagram' || scraped.platform === 'tiktok')) {
-      updates.platform = scraped.platform;
+    if (!del.platform) {
+      const p = scraped.platform as string;
+      updates.platform = p === 'tiktok' ? 'tiktok' : 'instagram';
     }
 
     await supabase
@@ -119,6 +180,7 @@ export async function POST(
       success: true,
       metrics: metricRecord,
       scraped,
+      breakdown,
       deliverable: mapDeliverableRow(deliverablePayload),
     });
   } catch (err: any) {
@@ -129,3 +191,4 @@ export async function POST(
     );
   }
 }
+

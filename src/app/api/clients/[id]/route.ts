@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { enforceAuth, canAccessClient, isAdmin } from '@/lib/permissions';
 import { fetchClientDetail, updateClient, isClientStatus, upsertContract, upsertClientSocials } from '@/lib/data';
 import { isPlatform } from '@/lib/data';
+import { packClientMonthlyGoals } from '@/lib/clientGoals';
 
 export async function GET(
   _request: NextRequest,
@@ -131,6 +132,13 @@ export async function PATCH(
       }
       const supabase = createServerSupabaseClient();
       await supabase.from('clients').update({ tags: currentTags }).eq('id', clientId);
+    }
+
+    if (body.monthlyGoals && typeof body.monthlyGoals === 'object') {
+      const supabase = createServerSupabaseClient();
+      const { data: cRow } = await supabase.from('clients').select('tags').eq('id', clientId).single();
+      const packedTags = packClientMonthlyGoals(cRow?.tags || [], body.monthlyGoals);
+      await supabase.from('clients').update({ tags: packedTags }).eq('id', clientId);
     }
 
     if (isAdmin(user) && contract && typeof contract === 'object') {

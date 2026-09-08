@@ -16,6 +16,7 @@ import {
   X,
   MapPin,
   Clock,
+  Sparkles,
 } from 'lucide-react';
 
 interface ClientTableProps {
@@ -45,6 +46,11 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
     services: '',
     notes: '',
     assignedUserIds: [] as string[],
+    monthlyReels: '',
+    monthlyPosts: '',
+    monthlyStories: '',
+    monthlyOther: '',
+    monthlyOtherLabel: '',
   });
 
   // Filter clients
@@ -136,6 +142,19 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           services: formData.services.split(',').map((s) => s.trim()).filter(Boolean),
           notes: formData.notes.trim() || null,
           assignedUserIds: formData.assignedUserIds,
+          monthlyGoals: {
+            selectedFormats: [
+              parseInt(formData.monthlyReels, 10) > 0 ? 'reels' : null,
+              parseInt(formData.monthlyPosts, 10) > 0 ? 'posts' : null,
+              parseInt(formData.monthlyStories, 10) > 0 ? 'stories' : null,
+              parseInt(formData.monthlyOther, 10) > 0 ? 'other' : null,
+            ].filter(Boolean) as string[],
+            reels: Math.max(0, parseInt(formData.monthlyReels, 10) || 0),
+            posts: Math.max(0, parseInt(formData.monthlyPosts, 10) || 0),
+            stories: Math.max(0, parseInt(formData.monthlyStories, 10) || 0),
+            other: Math.max(0, parseInt(formData.monthlyOther, 10) || 0),
+            otherLabel: formData.monthlyOtherLabel.trim() || 'Other Content',
+          },
         }),
       });
 
@@ -152,6 +171,11 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           services: '',
           notes: '',
           assignedUserIds: [],
+          monthlyReels: '',
+          monthlyPosts: '',
+          monthlyStories: '',
+          monthlyOther: '',
+          monthlyOtherLabel: '',
         });
         router.refresh();
       } else {
@@ -457,17 +481,60 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                         </div>
                       </td>
 
-                      {/* Content Activity */}
+                      {/* Content Activity & Goals */}
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11.5px', color: '#4b5563' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <Video size={12} color="#6366f1" />
-                            <strong>{numDeliverables}</strong>
-                          </span>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <MessageSquare size={12} color="#10b981" />
-                            <strong>{numMessages}</strong>
-                          </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11.5px', color: '#4b5563' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }} title="Logged deliverables">
+                              <Video size={12} color="#6366f1" />
+                              <strong>{numDeliverables}</strong>
+                            </span>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }} title="Chat messages">
+                              <MessageSquare size={12} color="#10b981" />
+                              <strong>{numMessages}</strong>
+                            </span>
+                          </div>
+
+                          {(() => {
+                            const g = client.monthlyGoals;
+                            if (!g) return null;
+                            const items: string[] = [];
+                            if ((!g.selectedFormats || g.selectedFormats.includes('reels')) && (g.reels ?? 0) > 0) {
+                              items.push(`${g.reels}R`);
+                            }
+                            if ((!g.selectedFormats || g.selectedFormats.includes('posts')) && (g.posts ?? 0) > 0) {
+                              items.push(`${g.posts}P`);
+                            }
+                            if ((!g.selectedFormats || g.selectedFormats.includes('stories')) && (g.stories ?? 0) > 0) {
+                              items.push(`${g.stories}S`);
+                            }
+                            if ((!g.selectedFormats || g.selectedFormats.includes('other')) && (g.other ?? 0) > 0) {
+                              items.push(`${g.other} ${g.otherLabel ? g.otherLabel.slice(0, 8) : 'Other'}`);
+                            }
+                            if (items.length === 0) return null;
+
+                            return (
+                              <div
+                                style={{
+                                  fontSize: '10px',
+                                  color: '#4338ca',
+                                  fontWeight: 600,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                  backgroundColor: '#f5f3ff',
+                                  border: '1px solid #e0e7ff',
+                                  padding: '1px 5px',
+                                  borderRadius: 4,
+                                  width: 'fit-content',
+                                }}
+                                title="Guaranteed monthly content targets"
+                              >
+                                <Sparkles size={10} color="#7c3aed" />
+                                <span>{items.join(' · ')}</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
 
@@ -625,6 +692,86 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                     placeholder="e.g. TikTok UGC, Instagram Reels, Creator Seeding"
                     className="input-field"
                   />
+                </div>
+              </div>
+
+              {/* Monthly Content Deliverables Section */}
+              <div
+                style={{
+                  padding: '12px 14px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Sparkles size={13} color="#6366f1" />
+                    Monthly Content Deliverables (Optional)
+                  </div>
+                  <span style={{ fontSize: '10px', color: '#64748b' }}>Leave 0 or blank to hide from tracker</span>
+                </div>
+                <div className="grid-responsive-3" style={{ gap: '8px' }}>
+                  <div>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>🎬 Reels / month</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input-field"
+                      placeholder="e.g. 12"
+                      value={formData.monthlyReels}
+                      onChange={(e) => setFormData({ ...formData, monthlyReels: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>📸 Posts / month</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input-field"
+                      placeholder="e.g. 4"
+                      value={formData.monthlyPosts}
+                      onChange={(e) => setFormData({ ...formData, monthlyPosts: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>📱 Stories / month</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input-field"
+                      placeholder="e.g. 20"
+                      value={formData.monthlyStories}
+                      onChange={(e) => setFormData({ ...formData, monthlyStories: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '8px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>⚡ Custom Format Name (Optional)</label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      placeholder="e.g. TikToks, UGC Videos, Graphics"
+                      value={formData.monthlyOtherLabel}
+                      onChange={(e) => setFormData({ ...formData, monthlyOtherLabel: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>Custom Target / month</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className="input-field"
+                      placeholder="e.g. 8"
+                      value={formData.monthlyOther}
+                      onChange={(e) => setFormData({ ...formData, monthlyOther: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -11,7 +11,7 @@ export type CreatorRole =
   | 'designer'
   | 'model';
 export type DeliverableFormat = 'reel' | 'photo' | 'story' | 'carousel';
-export type Platform = 'instagram' | 'tiktok' | 'facebook' | 'youtube';
+export type Platform = 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'both';
 export type DeliverableStatus = 'idea' | 'scripted' | 'filmed' | 'editing' | 'scheduled' | 'published';
 export type PartnerType = 'individual' | 'agency';
 export type AssignmentStatus = 'booked' | 'done' | 'cancelled';
@@ -94,6 +94,8 @@ export interface DeliverableData {
   published: boolean;
   status: DeliverableStatus;
   link: string | null;
+  instagramLink?: string | null;
+  tiktokLink?: string | null;
   format: DeliverableFormat | null;
   platform: Platform | null;
   results: string | null;
@@ -169,6 +171,15 @@ export interface ClientHealthData {
   computedAt: string;
 }
 
+export interface ClientMonthlyGoals {
+  reels?: number;
+  posts?: number;
+  stories?: number;
+  other?: number;
+  otherLabel?: string;
+  selectedFormats?: string[];
+}
+
 export interface ClientData {
   id: string;
   name: string;
@@ -189,6 +200,7 @@ export interface ClientData {
   services: string[];
   notes: string | null;
   createdAt: string;
+  monthlyGoals?: ClientMonthlyGoals;
   contract?: ClientContractData | null;
   socialAccounts?: SocialAccountData[];
   health?: ClientHealthData | null;

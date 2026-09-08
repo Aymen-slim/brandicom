@@ -24,6 +24,7 @@ import {
   ArrowRight,
   Check,
 } from 'lucide-react';
+import { InstagramIcon, TikTokIcon } from '@/components/SocialIcons';
 
 interface ContentCalendarProps {
   initialDeliverables: DeliverableData[];
@@ -82,6 +83,11 @@ export function ContentCalendar({
     published: boolean;
     status: DeliverableStatus;
     idea: string;
+    platform: Platform;
+    format: DeliverableFormat;
+    link: string;
+    instagramLink: string;
+    tiktokLink: string;
   }>({
     filmingDate: '',
     publishDate: '',
@@ -90,6 +96,11 @@ export function ContentCalendar({
     published: false,
     status: 'idea',
     idea: '',
+    platform: 'instagram',
+    format: 'reel',
+    link: '',
+    instagramLink: '',
+    tiktokLink: '',
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -98,7 +109,7 @@ export function ContentCalendar({
   const [createFormData, setCreateFormData] = useState({
     clientId: clients[0]?.id || '',
     idea: '',
-    platform: 'instagram' as Platform,
+    platform: 'both' as Platform,
     format: 'reel' as DeliverableFormat,
     filmingDate: formatDateKey(new Date()),
     publishDate: '',
@@ -106,6 +117,9 @@ export function ContentCalendar({
     creatorId: '',
     filmed: false,
     status: 'idea' as DeliverableStatus,
+    link: '',
+    instagramLink: '',
+    tiktokLink: '',
   });
   const [creating, setCreating] = useState(false);
 
@@ -178,7 +192,9 @@ export function ContentCalendar({
         const q = searchQuery.toLowerCase();
         const matchTitle = (evt.deliverable.idea || '').toLowerCase().includes(q);
         const matchClient = evt.clientName.toLowerCase().includes(q);
-        const matchPlatform = (evt.deliverable.platform || '').toLowerCase().includes(q);
+        const matchPlatform =
+          (evt.deliverable.platform || '').toLowerCase().includes(q) ||
+          (evt.deliverable.platform === 'both' && ('instagram'.includes(q) || 'tiktok'.includes(q)));
         const matchCreator = evt.deliverable.creatorAssignments?.some((ca) =>
           ca.creator.name.toLowerCase().includes(q)
         );
@@ -332,14 +348,20 @@ export function ContentCalendar({
   // Open event editor
   const handleEventClick = (evt: CalendarEvent) => {
     setSelectedEvent(evt);
+    const d = evt.deliverable;
     setEditFormData({
-      filmingDate: evt.deliverable.filmingDate || '',
-      publishDate: evt.deliverable.publishDate || '',
-      publishTime: evt.deliverable.publishTime || '',
-      filmed: Boolean(evt.deliverable.filmed),
-      published: Boolean(evt.deliverable.published),
-      status: evt.deliverable.status,
-      idea: evt.deliverable.idea || '',
+      filmingDate: d.filmingDate || '',
+      publishDate: d.publishDate || '',
+      publishTime: d.publishTime || '',
+      filmed: Boolean(d.filmed),
+      published: Boolean(d.published),
+      status: d.status,
+      idea: d.idea || '',
+      platform: d.platform || 'instagram',
+      format: d.format || 'reel',
+      link: d.link || '',
+      instagramLink: d.instagramLink || '',
+      tiktokLink: d.tiktokLink || '',
     });
   };
 
@@ -418,6 +440,11 @@ export function ContentCalendar({
         published: isPublished,
         status: editFormData.status,
         idea: editFormData.idea.trim(),
+        platform: editFormData.platform,
+        format: editFormData.format,
+        link: editFormData.platform !== 'both' ? editFormData.link : undefined,
+        instagramLink: editFormData.instagramLink,
+        tiktokLink: editFormData.tiktokLink,
       };
 
       const res = await fetch(`/api/deliverables/${selectedEvent.deliverable.id}`, {
@@ -468,6 +495,9 @@ export function ContentCalendar({
         filmed: isFilmed,
         published: isPublished,
         status: resolvedStatus,
+        link: createFormData.platform !== 'both' ? createFormData.link : undefined,
+        instagramLink: createFormData.instagramLink,
+        tiktokLink: createFormData.tiktokLink,
       };
 
       const res = await fetch(`/api/clients/${createFormData.clientId}/deliverables`, {
@@ -488,7 +518,7 @@ export function ContentCalendar({
       setCreateFormData({
         clientId: clients[0]?.id || '',
         idea: '',
-        platform: 'instagram',
+        platform: 'both',
         format: 'reel',
         filmingDate: formatDateKey(new Date()),
         publishDate: '',
@@ -496,6 +526,9 @@ export function ContentCalendar({
         creatorId: '',
         filmed: false,
         status: 'idea',
+        link: '',
+        instagramLink: '',
+        tiktokLink: '',
       });
     } catch (err: any) {
       alert(err.message || 'Failed to create deliverable');
@@ -1031,9 +1064,21 @@ export function ContentCalendar({
                             </button>
                           </div>
 
-                          {/* Client Name */}
-                          <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {evt.clientName}
+                          {/* Client Name & Platform Badges */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                            <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {evt.clientName}
+                            </span>
+                            {evt.deliverable.platform === 'both' || (evt.deliverable.instagramLink && evt.deliverable.tiktokLink) ? (
+                              <div style={{ display: 'inline-flex', gap: '2px', flexShrink: 0 }}>
+                                <span style={{ fontSize: '8px', fontWeight: 800, color: '#db2777', backgroundColor: '#fdf2f8', padding: '1px 3px', borderRadius: '2px', lineHeight: 1 }}>IG</span>
+                                <span style={{ fontSize: '8px', fontWeight: 800, color: '#0891b2', backgroundColor: '#ecfeff', padding: '1px 3px', borderRadius: '2px', lineHeight: 1 }}>TT</span>
+                              </div>
+                            ) : evt.deliverable.platform ? (
+                              <span style={{ fontSize: '8px', fontWeight: 700, color: evt.deliverable.platform === 'instagram' ? '#db2777' : evt.deliverable.platform === 'tiktok' ? '#0891b2' : '#6b7280', textTransform: 'uppercase', flexShrink: 0 }}>
+                                {evt.deliverable.platform === 'instagram' ? 'IG' : evt.deliverable.platform === 'tiktok' ? 'TT' : evt.deliverable.platform.slice(0, 2)}
+                              </span>
+                            ) : null}
                           </div>
 
                           {/* Deliverable Idea */}
@@ -1159,8 +1204,24 @@ export function ContentCalendar({
                             )}
                           </div>
 
-                          <div style={{ fontSize: '12px', fontWeight: 700, color: '#111827' }}>
-                            {evt.clientName}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#111827' }}>
+                              {evt.clientName}
+                            </div>
+                            {evt.deliverable.platform === 'both' || (evt.deliverable.instagramLink && evt.deliverable.tiktokLink) ? (
+                              <div style={{ display: 'inline-flex', gap: '3px' }}>
+                                <span style={{ fontSize: '9px', fontWeight: 800, color: '#db2777', backgroundColor: '#fdf2f8', padding: '1px 4px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                  <InstagramIcon size={9} color="#db2777" /> IG
+                                </span>
+                                <span style={{ fontSize: '9px', fontWeight: 800, color: '#0891b2', backgroundColor: '#ecfeff', padding: '1px 4px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                                  <TikTokIcon size={9} color="#0891b2" /> TT
+                                </span>
+                              </div>
+                            ) : evt.deliverable.platform ? (
+                              <span style={{ fontSize: '9.5px', fontWeight: 700, color: evt.deliverable.platform === 'instagram' ? '#db2777' : evt.deliverable.platform === 'tiktok' ? '#0891b2' : '#6b7280', textTransform: 'capitalize' }}>
+                                {evt.deliverable.platform}
+                              </span>
+                            ) : null}
                           </div>
                           <div style={{ fontSize: '11.5px', color: '#4b5563' }}>
                             {evt.deliverable.idea}
@@ -1259,20 +1320,59 @@ export function ContentCalendar({
                           <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>
                             {evt.clientName}
                           </span>
-                          {evt.deliverable.platform && (
+                          {evt.deliverable.platform === 'both' || (evt.deliverable.instagramLink && evt.deliverable.tiktokLink) ? (
+                            <div style={{ display: 'inline-flex', gap: '4px' }}>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#fdf2f8',
+                                  color: '#be185d',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                }}
+                              >
+                                <InstagramIcon size={10} color="#be185d" /> Instagram
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  backgroundColor: '#f3f4f6',
+                                  color: '#111827',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 3,
+                                }}
+                              >
+                                <TikTokIcon size={10} color="#111827" /> TikTok
+                              </span>
+                            </div>
+                          ) : evt.deliverable.platform ? (
                             <span
                               style={{
                                 fontSize: '10.5px',
                                 textTransform: 'capitalize',
                                 padding: '1px 6px',
                                 borderRadius: '4px',
-                                backgroundColor: '#f3f4f6',
-                                color: '#4b5563',
+                                backgroundColor: evt.deliverable.platform === 'instagram' ? '#fdf2f8' : evt.deliverable.platform === 'tiktok' ? '#f3f4f6' : '#f3f4f6',
+                                color: evt.deliverable.platform === 'instagram' ? '#be185d' : evt.deliverable.platform === 'tiktok' ? '#111827' : '#4b5563',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                                fontWeight: 600,
                               }}
                             >
+                              {evt.deliverable.platform === 'instagram' && <InstagramIcon size={10} color="#be185d" />}
+                              {evt.deliverable.platform === 'tiktok' && <TikTokIcon size={10} color="#111827" />}
                               {evt.deliverable.platform}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '2px' }}>
                           {evt.deliverable.idea}
@@ -1403,6 +1503,113 @@ export function ContentCalendar({
                   className="input-field"
                 />
               </div>
+
+              {/* Platform & Format */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '4px' }}>
+                    Platform
+                  </label>
+                  <select
+                    value={editFormData.platform}
+                    onChange={(e) => setEditFormData({ ...editFormData, platform: e.target.value as Platform })}
+                    className="input-field"
+                  >
+                    <option value="both">Instagram & TikTok (Both)</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="facebook">Facebook</option>
+                    <option value="youtube">YouTube</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '4px' }}>
+                    Format
+                  </label>
+                  <select
+                    value={editFormData.format}
+                    onChange={(e) => setEditFormData({ ...editFormData, format: e.target.value as DeliverableFormat })}
+                    className="input-field"
+                  >
+                    <option value="reel">Reel / Short</option>
+                    <option value="photo">Single Photo</option>
+                    <option value="carousel">Carousel (10 slides)</option>
+                    <option value="story">Story Sequence</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Live Post URL(s) based on Platform */}
+              {editFormData.platform === 'both' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#db2777', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                      <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://instagram.com/reel/..."
+                      value={editFormData.instagramLink}
+                      onChange={(e) => setEditFormData({ ...editFormData, instagramLink: e.target.value })}
+                      className="input-field"
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#0891b2', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                      <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://tiktok.com/@.../video/..."
+                      value={editFormData.tiktokLink}
+                      onChange={(e) => setEditFormData({ ...editFormData, tiktokLink: e.target.value })}
+                      className="input-field"
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
+                </div>
+              ) : editFormData.platform === 'instagram' ? (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#db2777', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://instagram.com/reel/..."
+                    value={editFormData.instagramLink || editFormData.link}
+                    onChange={(e) => setEditFormData({ ...editFormData, instagramLink: e.target.value, link: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              ) : editFormData.platform === 'tiktok' ? (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#0891b2', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://tiktok.com/@.../video/..."
+                    value={editFormData.tiktokLink || editFormData.link}
+                    onChange={(e) => setEditFormData({ ...editFormData, tiktokLink: e.target.value, link: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '4px' }}>
+                    Live Post URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={editFormData.link}
+                    onChange={(e) => setEditFormData({ ...editFormData, link: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              )}
 
               {/* Two Date Inputs: Filming Date & Posting Date */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1608,6 +1815,7 @@ export function ContentCalendar({
                     onChange={(e) => setCreateFormData({ ...createFormData, platform: e.target.value as Platform })}
                     className="input-field"
                   >
+                    <option value="both">Instagram & TikTok (Both)</option>
                     <option value="instagram">Instagram</option>
                     <option value="tiktok">TikTok</option>
                     <option value="facebook">Facebook</option>
@@ -1631,6 +1839,67 @@ export function ContentCalendar({
                   </select>
                 </div>
               </div>
+
+              {/* Live Post URL(s) based on Platform */}
+              {createFormData.platform === 'both' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: '#f8fafc', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#db2777', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                      <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://instagram.com/reel/..."
+                      value={createFormData.instagramLink}
+                      onChange={(e) => setCreateFormData({ ...createFormData, instagramLink: e.target.value })}
+                      className="input-field"
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#0891b2', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                      <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://tiktok.com/@.../video/..."
+                      value={createFormData.tiktokLink}
+                      onChange={(e) => setCreateFormData({ ...createFormData, tiktokLink: e.target.value })}
+                      className="input-field"
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#4b5563', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    {createFormData.platform === 'instagram' && <InstagramIcon size={12} color="#db2777" />}
+                    {createFormData.platform === 'tiktok' && <TikTokIcon size={12} color="#0891b2" />}
+                    Live Post URL (Optional)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder={
+                      createFormData.platform === 'instagram'
+                        ? 'https://instagram.com/reel/...'
+                        : createFormData.platform === 'tiktok'
+                        ? 'https://tiktok.com/@.../video/...'
+                        : 'https://...'
+                    }
+                    value={createFormData.link || (createFormData.platform === 'instagram' ? createFormData.instagramLink : createFormData.tiktokLink)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setCreateFormData({
+                        ...createFormData,
+                        link: val,
+                        instagramLink: createFormData.platform === 'instagram' ? val : createFormData.instagramLink,
+                        tiktokLink: createFormData.platform === 'tiktok' ? val : createFormData.tiktokLink,
+                      });
+                    }}
+                    className="input-field"
+                  />
+                </div>
+              )}
 
               {/* Dates: Filming, Posting & Time */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.85fr', gap: '12px' }}>

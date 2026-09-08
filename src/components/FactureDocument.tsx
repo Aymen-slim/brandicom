@@ -256,7 +256,10 @@ export function FactureDocument({
               <span className="total-value">{formatMoney(invoice.subtotal)}</span>
             </div>
             <div className="total-row">
-              <span className="total-label">TVA ({Math.round((invoice.vatRate || VAT_RATE) * 100)}%) :</span>
+              <span className="total-label">
+                TVA ({Math.round((invoice.vatRate ?? VAT_RATE) * 100)}%
+                {(invoice.vatRate ?? VAT_RATE) === 0 ? ' - Exonérée' : ''}) :
+              </span>
               <span className="total-value">{formatMoney(vatAmount)}</span>
             </div>
             <div className="total-row grand-total">

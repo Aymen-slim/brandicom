@@ -202,7 +202,7 @@ export async function updateInvoice(
   if (fields.subtotal !== undefined || fields.vatRate !== undefined) {
     const { data: existing } = await supabase.from('invoices').select('subtotal, vat_rate').eq('id', id).single();
     const subtotal = fields.subtotal ?? Number(existing?.subtotal || 0);
-    const vatRate = fields.vatRate ?? Number(existing?.vat_rate || VAT_RATE);
+    const vatRate = fields.vatRate ?? (existing?.vat_rate != null ? Number(existing.vat_rate) : VAT_RATE);
     const computed = withVat(subtotal, vatRate);
     patch.subtotal = computed.subtotal;
     patch.vat_rate = vatRate;

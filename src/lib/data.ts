@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from './supabase/server';
 import { CurrentUser } from './permissions';
+import { parseDeliverableLinks } from './deliverables';
+import { extractClientMonthlyGoals, packClientMonthlyGoals } from './clientGoals';
 import {
   AssignmentStatus,
   ClientAssignmentData,
@@ -33,7 +35,7 @@ export const CREATOR_ROLES: CreatorRole[] = [
   'model',
 ];
 export const DELIVERABLE_FORMATS: DeliverableFormat[] = ['reel', 'photo', 'story', 'carousel'];
-export const PLATFORMS: Platform[] = ['instagram', 'tiktok', 'facebook', 'youtube'];
+export const PLATFORMS: Platform[] = ['instagram', 'tiktok', 'facebook', 'youtube', 'both'];
 export const DELIVERABLE_STATUSES: DeliverableStatus[] = [
   'idea',
   'scripted',
@@ -178,6 +180,7 @@ export function mapClientRow(row: any, opts?: { contract?: ClientContractData | 
     services: row.services || [],
     notes: row.notes,
     createdAt: row.created_at,
+    monthlyGoals: extractClientMonthlyGoals(row.tags || []),
     socialAccounts: (row.client_social_accounts || []).map((s: any) => {
       const base = mapSocial(s);
       const tagPrefix = `baseline:${s.platform}:`;
@@ -251,6 +254,7 @@ export function mapDeliverableRow(row: any): DeliverableData {
     status: ca.status,
   }));
   const filmingDate = row.filming_date ?? creatorAssignments[0]?.scheduledDate ?? null;
+  const parsedLinks = parseDeliverableLinks(row.link, row.platform);
 
   let publishTime: string | null = row.publish_time ?? null;
   if (!publishTime && row.scheduled_at) {
@@ -277,9 +281,11 @@ export function mapDeliverableRow(row: any): DeliverableData {
     filmed: Boolean(row.filmed),
     published: Boolean(row.published),
     status,
-    link: row.link,
+    link: parsedLinks.primaryLink || row.link,
+    instagramLink: parsedLinks.instagramLink,
+    tiktokLink: parsedLinks.tiktokLink,
     format: row.format,
-    platform: row.platform,
+    platform: parsedLinks.platform || row.platform,
     results: row.results,
     publishDate: row.publish_date,
     publishTime,

@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { ClientData, DeliverableData, MessageData, UserSummary } from '@/types';
 import { ClientDetailHeader } from './ClientDetailHeader';
 import { DeliverableTracker } from './DeliverableTracker';
+import { ClientGoalsProgressBar } from './ClientGoalsProgressBar';
+import { computeClientGoalsProgress } from '@/lib/clientGoals';
 import { ChatThread } from './ChatThread';
 import { MetricsEntryModal } from './MetricsEntryModal';
 import dynamic from 'next/dynamic';
 import { formatMoney, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
 import { InstagramIcon, TikTokIcon } from './SocialIcons';
-import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight } from 'lucide-react';
+import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight, AlertTriangle } from 'lucide-react';
 
 const Markdown = dynamic(() => import('react-markdown'), { ssr: false });
 
@@ -48,7 +50,18 @@ export function ClientWorkspace({
     new Date().toISOString().slice(0, 7)
   );
   const [newInvoiceDueDate, setNewInvoiceDueDate] = useState('');
+  const [newInvoiceVatRate, setNewInvoiceVatRate] = useState<number>(0.19);
+  const [newInvoiceIsCustomVat, setNewInvoiceIsCustomVat] = useState(false);
+  const [newInvoiceCustomVat, setNewInvoiceCustomVat] = useState('');
   const [creatingInvoice, setCreatingInvoice] = useState(false);
+
+  // Active TVA calculations for new invoice
+  const activeNewInvoiceVat = newInvoiceIsCustomVat
+    ? (Number(newInvoiceCustomVat) || 0) / 100
+    : newInvoiceVatRate;
+  const newInvoiceSubtotalNum = Number(newInvoiceSubtotal) || 0;
+  const newInvoiceVatAmount = Math.round(newInvoiceSubtotalNum * activeNewInvoiceVat * 1000) / 1000;
+  const newInvoiceTotalTTC = Math.round((newInvoiceSubtotalNum + newInvoiceVatAmount) * 1000) / 1000;
 
   // Follower Growth State
   const [syncingSocialPlatform, setSyncingSocialPlatform] = useState<'instagram' | 'tiktok' | null>(null);
@@ -184,6 +197,7 @@ export function ClientWorkspace({
         body: JSON.stringify({
           clientId: currentClient.id,
           subtotal: Number(newInvoiceSubtotal),
+          vatRate: activeNewInvoiceVat,
           periodLabel: newInvoicePeriod || null,
           dueDate: newInvoiceDueDate || null,
           status: 'sent',
@@ -342,6 +356,11 @@ export function ClientWorkspace({
     }
   };
 
+  const goalsProgress = useMemo(
+    () => computeClientGoalsProgress(currentClient, deliverables),
+    [currentClient, deliverables]
+  );
+
   return (
     <div>
       <ClientDetailHeader
@@ -349,6 +368,14 @@ export function ClientWorkspace({
         availableUsers={availableUsers}
         user={user}
         onClientUpdated={(updated) => setCurrentClient(updated)}
+      />
+
+      {/* Monthly Content Goals Progress Bar & End-of-Month Alert */}
+      <ClientGoalsProgressBar
+        client={currentClient}
+        deliverables={deliverables}
+        onClientUpdated={(updated) => setCurrentClient(updated)}
+        onNewDeliverable={() => setTab('content')}
       />
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -363,8 +390,25 @@ export function ClientWorkspace({
                 setTab(t.id);
                 if (t.id === 'finance') loadFinance();
               }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
             >
               {t.label}
+              {t.id === 'content' && goalsProgress.alertNeeded && (
+                <span
+                  style={{
+                    backgroundColor: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '1px 5px',
+                    borderRadius: 10,
+                    lineHeight: '1.2',
+                  }}
+                  title="End-of-month alert: Content delivery goals behind schedule"
+                >
+                  !
+                </span>
+              )}
             </button>
           ))}
       </div>
@@ -926,40 +970,133 @@ export function ClientWorkspace({
                         <tr key={d.id}>
                           <td>
                             <div style={{ fontWeight: 600, color: '#111827' }}>{d.idea}</div>
-                            {d.link && (
-                              <a
-                                href={d.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={{
-                                  fontSize: 11,
-                                  color: '#4f46e5',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 3,
-                                  marginTop: 2,
-                                  textDecoration: 'none',
-                                }}
-                              >
-                                <ExternalLink size={10} />
-                                View Live Post
-                              </a>
+                            {d.platform === 'both' || (d.instagramLink && d.tiktokLink) ? (
+                              <div style={{ display: 'flex', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
+                                {d.instagramLink && (
+                                  <a
+                                    href={d.instagramLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: 11,
+                                      color: '#db2777',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                      textDecoration: 'none',
+                                      backgroundColor: '#fdf2f8',
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    <InstagramIcon size={11} color="#db2777" />
+                                    IG Post
+                                  </a>
+                                )}
+                                {d.tiktokLink && (
+                                  <a
+                                    href={d.tiktokLink}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    style={{
+                                      fontSize: 11,
+                                      color: '#0891b2',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 3,
+                                      textDecoration: 'none',
+                                      backgroundColor: '#ecfeff',
+                                      padding: '1px 6px',
+                                      borderRadius: 4,
+                                    }}
+                                  >
+                                    <TikTokIcon size={11} color="#0891b2" />
+                                    TikTok Post
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              (d.instagramLink || d.tiktokLink || d.link) && (
+                                <a
+                                  href={d.instagramLink || d.tiktokLink || d.link || '#'}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    fontSize: 11,
+                                    color: '#4f46e5',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    marginTop: 2,
+                                    textDecoration: 'none',
+                                  }}
+                                >
+                                  {d.platform === 'instagram' ? (
+                                    <InstagramIcon size={11} color="#db2777" />
+                                  ) : d.platform === 'tiktok' ? (
+                                    <TikTokIcon size={11} color="#0891b2" />
+                                  ) : (
+                                    <ExternalLink size={10} />
+                                  )}
+                                  View Live Post
+                                </a>
+                              )
                             )}
                           </td>
                           <td>
-                            <span
-                              style={{
-                                textTransform: 'capitalize',
-                                fontSize: 11,
-                                fontWeight: 600,
-                                padding: '2px 8px',
-                                borderRadius: 4,
-                                backgroundColor: d.platform === 'instagram' ? '#fdf2f8' : d.platform === 'tiktok' ? '#f3f4f6' : '#eff6ff',
-                                color: d.platform === 'instagram' ? '#be185d' : '#1f2937',
-                              }}
-                            >
-                              {d.platform || 'General'}
-                            </span>
+                            {d.platform === 'both' || (d.instagramLink && d.tiktokLink) ? (
+                              <div style={{ display: 'inline-flex', gap: 4 }}>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    backgroundColor: '#fdf2f8',
+                                    color: '#be185d',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                  }}
+                                >
+                                  <InstagramIcon size={10} color="#be185d" /> IG
+                                </span>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    backgroundColor: '#f3f4f6',
+                                    color: '#111827',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                  }}
+                                >
+                                  <TikTokIcon size={10} color="#111827" /> TikTok
+                                </span>
+                              </div>
+                            ) : (
+                              <span
+                                style={{
+                                  textTransform: 'capitalize',
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  padding: '2px 8px',
+                                  borderRadius: 4,
+                                  backgroundColor: d.platform === 'instagram' ? '#fdf2f8' : d.platform === 'tiktok' ? '#f3f4f6' : '#eff6ff',
+                                  color: d.platform === 'instagram' ? '#be185d' : '#1f2937',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                }}
+                              >
+                                {d.platform === 'instagram' && <InstagramIcon size={11} color="#be185d" />}
+                                {d.platform === 'tiktok' && <TikTokIcon size={11} color="#1f2937" />}
+                                {d.platform || 'General'}
+                              </span>
+                            )}
                           </td>
                           <td style={{ fontWeight: 700, color: '#111827' }}>
                             {formatNumber(d.latestMetrics?.views) || '0'}
@@ -972,7 +1109,7 @@ export function ClientWorkspace({
                           </td>
                           <td style={{ textAlign: 'right', paddingRight: 16 }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                              {d.link && (
+                              {(d.link || d.instagramLink || d.tiktokLink) && (
                                 <button
                                   type="button"
                                   className="btn btn-secondary btn-sm"
@@ -985,10 +1122,20 @@ export function ClientWorkspace({
                                     alignItems: 'center',
                                     gap: 4,
                                   }}
-                                  title="Fetch latest views & likes via Apify"
+                                  title={
+                                    d.platform === 'both' || (d.instagramLink && d.tiktokLink)
+                                      ? 'Fetch latest views & likes for both Instagram & TikTok'
+                                      : 'Fetch latest views & likes via Apify'
+                                  }
                                 >
                                   <RefreshCw size={11} className={syncingPostId === d.id ? 'animate-spin' : ''} />
-                                  <span>{syncingPostId === d.id ? 'Syncing...' : 'Sync'}</span>
+                                  <span>
+                                    {syncingPostId === d.id
+                                      ? 'Syncing...'
+                                      : d.platform === 'both' || (d.instagramLink && d.tiktokLink)
+                                      ? 'Sync Both'
+                                      : 'Sync'}
+                                  </span>
                                 </button>
                               )}
                               <button
@@ -1068,56 +1215,126 @@ export function ClientWorkspace({
                 background: '#f8fafc',
                 border: '1px solid #e2e8f0',
                 borderRadius: 10,
-                padding: 16,
+                padding: 18,
                 marginBottom: 18,
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 1fr 1fr auto',
-                gap: 10,
-                alignItems: 'end',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
               }}
             >
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
-                  Montant HT (TND) *
-                </label>
-                <input
-                  className="input-field"
-                  type="number"
-                  step="0.001"
-                  required
-                  placeholder="ex: 4500"
-                  value={newInvoiceSubtotal}
-                  onChange={(e) => setNewInvoiceSubtotal(e.target.value)}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: 10, alignItems: 'start' }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                    Montant HT (TND) *
+                  </label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    step="0.001"
+                    required
+                    placeholder="ex: 4500"
+                    value={newInvoiceSubtotal}
+                    onChange={(e) => setNewInvoiceSubtotal(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                    Option TVA
+                  </label>
+                  <select
+                    className="input-field"
+                    value={newInvoiceIsCustomVat ? 'custom' : String(newInvoiceVatRate)}
+                    onChange={(e) => {
+                      if (e.target.value === 'custom') {
+                        setNewInvoiceIsCustomVat(true);
+                      } else {
+                        setNewInvoiceIsCustomVat(false);
+                        setNewInvoiceVatRate(Number(e.target.value));
+                      }
+                    }}
+                  >
+                    <option value="0.19">19% (Standard)</option>
+                    <option value="0.07">7% (Réduit)</option>
+                    <option value="0">0% (Sans TVA / Exonéré)</option>
+                    <option value="custom">Autre %</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                    Période (Mois)
+                  </label>
+                  <input
+                    className="input-field"
+                    placeholder="ex: 2026-09"
+                    value={newInvoicePeriod}
+                    onChange={(e) => setNewInvoicePeriod(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                    Échéance de paiement
+                  </label>
+                  <input
+                    className="input-field"
+                    type="date"
+                    value={newInvoiceDueDate}
+                    onChange={(e) => setNewInvoiceDueDate(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
-                  Période (Mois)
-                </label>
-                <input
-                  className="input-field"
-                  placeholder="ex: 2026-09"
-                  value={newInvoicePeriod}
-                  onChange={(e) => setNewInvoicePeriod(e.target.value)}
-                />
-              </div>
+              {newInvoiceIsCustomVat && (
+                <div style={{ maxWidth: 200 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
+                    Pourcentage TVA (%)
+                  </label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    step="0.1"
+                    placeholder="ex: 13"
+                    value={newInvoiceCustomVat}
+                    onChange={(e) => setNewInvoiceCustomVat(e.target.value)}
+                  />
+                </div>
+              )}
 
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
-                  Échéance de paiement
-                </label>
-                <input
-                  className="input-field"
-                  type="date"
-                  value={newInvoiceDueDate}
-                  onChange={(e) => setNewInvoiceDueDate(e.target.value)}
-                />
-              </div>
+              {/* Real-time Invoice Calculation Summary Bar */}
+              <div
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 6,
+                  padding: '8px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Montant HT: </span>
+                    <strong style={{ color: '#1e293b' }}>{formatMoney(newInvoiceSubtotalNum)}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>TVA ({Math.round(activeNewInvoiceVat * 100)}%): </span>
+                    <strong style={{ color: '#4f46e5' }}>+{formatMoney(newInvoiceVatAmount)}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#64748b' }}>Total TTC: </span>
+                    <strong style={{ color: '#059669', fontSize: 13 }}>{formatMoney(newInvoiceTotalTTC)}</strong>
+                  </div>
+                </div>
 
-              <button type="submit" disabled={creatingInvoice} className="btn btn-primary">
-                {creatingInvoice ? 'Création…' : 'Émettre Facture'}
-              </button>
+                <button type="submit" disabled={creatingInvoice} className="btn btn-primary btn-sm">
+                  {creatingInvoice ? 'Création…' : 'Émettre Facture'}
+                </button>
+              </div>
             </form>
           )}
 
@@ -1148,7 +1365,14 @@ export function ClientWorkspace({
                       </td>
                       <td style={{ fontSize: 12, color: '#64748b' }}>{inv.periodLabel || inv.issueDate}</td>
                       <td style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                        {formatMoney(inv.total)}
+                        <div>{formatMoney(inv.total)}</div>
+                        <div style={{ fontSize: 10, color: '#64748b', fontWeight: 500 }}>
+                          {(inv.vatRate ?? 0.19) === 0 ? (
+                            <span style={{ color: '#64748b' }}>Sans TVA (0%)</span>
+                          ) : (
+                            <span>TVA {Math.round((inv.vatRate ?? 0.19) * 100)}%</span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ fontVariantNumeric: 'tabular-nums', color: (inv.paidAmount || 0) > 0 ? '#059669' : undefined }}>
                         {formatMoney(inv.paidAmount || 0)}

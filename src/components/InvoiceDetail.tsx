@@ -1,11 +1,28 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { InvoiceData, PaymentData, PaymentMethod } from '@/types';
 import { formatMoney, VAT_RATE } from '@/lib/format';
-import { Printer, CheckCircle, FileText, ArrowRight, Building2, MapPin, Mail, Phone, Plus, Trash2, X } from 'lucide-react';
+import {
+  Printer,
+  CheckCircle,
+  FileText,
+  ArrowRight,
+  Building2,
+  MapPin,
+  Mail,
+  Phone,
+  Plus,
+  Trash2,
+  X,
+  Calculator,
+  Percent,
+  BadgePercent,
+  Receipt,
+  Sparkles,
+} from 'lucide-react';
 import { FactureDocument } from './FactureDocument';
 
 export function InvoiceDetail({
@@ -26,25 +43,73 @@ export function InvoiceDetail({
   const [deleting, setDeleting] = useState(false);
   const [showFactureModal, setShowFactureModal] = useState(false);
 
+  // Advance Payment & TVA Option State
+  const [paymentType, setPaymentType] = useState<'standard' | 'advance'>('standard');
+  const [tvaMode, setTvaMode] = useState<'ttc' | 'add_tva'>('ttc');
+  const [paymentVatRate, setPaymentVatRate] = useState<number>(initialInvoice.vatRate ?? 0.19);
+  const [isCustomVat, setIsCustomVat] = useState(false);
+  const [customVatRate, setCustomVatRate] = useState('');
+  const [amountHT, setAmountHT] = useState('');
+
   const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
   const remaining = Math.max(0, invoice.total - totalPaid);
   const isPaid = totalPaid >= invoice.total;
   const isPartiallyPaid = !isPaid && totalPaid > 0;
 
+  // Active TVA rate for calculation
+  const activeVatRate = isCustomVat
+    ? (Number(customVatRate) || 0) / 100
+    : paymentVatRate;
+
+  // Real-time calculation from HT when "add_tva" mode is active
+  const computedFromHT = useMemo(() => {
+    const ht = Number(amountHT) || 0;
+    const vat = Math.round(ht * activeVatRate * 1000) / 1000;
+    const ttc = Math.round((ht + vat) * 1000) / 1000;
+    return { ht, vat, ttc };
+  }, [amountHT, activeVatRate]);
+
+  // Actual TTC amount to record against the invoice
+  const effectiveAmountToRecord = tvaMode === 'add_tva' ? computedFromHT.ttc : Number(amount) || 0;
+
+  // Preset quick advance payment amount
+  const setAdvancePercent = (pct: number) => {
+    const targetTTC = Math.round(invoice.total * pct * 1000) / 1000;
+    if (tvaMode === 'add_tva') {
+      const ht = activeVatRate > 0 ? targetTTC / (1 + activeVatRate) : targetTTC;
+      setAmountHT(ht.toFixed(3));
+    } else {
+      setAmount(targetTTC.toFixed(3));
+    }
+  };
+
   const record = async (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = Number(amount);
+    const numAmount = effectiveAmountToRecord;
     if (!Number.isFinite(numAmount) || numAmount <= 0) return;
 
     setRecording(true);
     try {
+      let finalReference = reference.trim();
+      if (tvaMode === 'add_tva') {
+        const vatPct = Math.round(activeVatRate * 100);
+        const tvaNote = `Base HT: ${formatMoney(computedFromHT.ht)} + TVA ${vatPct}% (${formatMoney(computedFromHT.vat)})`;
+        if (paymentType === 'advance') {
+          finalReference = finalReference ? `Acompte · ${tvaNote} · ${finalReference}` : `Acompte · ${tvaNote}`;
+        } else {
+          finalReference = finalReference ? `${tvaNote} · ${finalReference}` : tvaNote;
+        }
+      } else if (paymentType === 'advance') {
+        finalReference = finalReference ? `Acompte · ${finalReference}` : 'Acompte';
+      }
+
       const res = await fetch(`/api/invoices/${invoice.id}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: numAmount,
           method,
-          reference: reference.trim() || null,
+          reference: finalReference || null,
           paidAt: paidAt || undefined,
         }),
       });
@@ -63,6 +128,7 @@ export function InvoiceDetail({
         }));
 
         setAmount('');
+        setAmountHT('');
         setReference('');
         // Automatically open the Facture modal so admin gets the facture receipt immediately!
         setShowFactureModal(true);
@@ -210,7 +276,10 @@ export function InvoiceDetail({
                   </td>
                 </tr>
                 <tr>
-                  <td>TVA {Math.round((invoice.vatRate || VAT_RATE) * 100)}%</td>
+                  <td>
+                    TVA {Math.round((invoice.vatRate ?? VAT_RATE) * 100)}%
+                    {(invoice.vatRate ?? VAT_RATE) === 0 ? ' (Exonérée)' : ''}
+                  </td>
                   <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     {formatMoney(invoice.total - invoice.subtotal)}
                   </td>
@@ -277,8 +346,42 @@ export function InvoiceDetail({
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 600, color: '#111827' }}>
+                      <div style={{ fontWeight: 600, color: '#111827', display: 'flex', alignItems: 'center', gap: 6 }}>
                         {formatMoney(p.amount)}
+                        {p.reference?.includes('Acompte') && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              backgroundColor: '#fef3c7',
+                              color: '#b45309',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <BadgePercent size={10} /> Acompte
+                          </span>
+                        )}
+                        {p.reference?.includes('TVA') && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              backgroundColor: '#eff6ff',
+                              color: '#1d4ed8',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <Percent size={9} /> TVA incluse
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: 11, color: '#64748b', textTransform: 'capitalize' }}>
                         {p.paidAt} · {p.method.replace('_', ' ')}
@@ -295,36 +398,255 @@ export function InvoiceDetail({
 
             {/* Record Payment Form */}
             {remaining > 0 ? (
-              <form onSubmit={record} style={{ marginTop: 16, borderTop: '1px solid #eaedf0', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>
-                  Enregistrer un Règlement
+              <form onSubmit={record} style={{ marginTop: 16, borderTop: '1px solid #eaedf0', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#111827', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Receipt size={15} color="#4338ca" />
+                    Enregistrer un Paiement / Acompte
+                  </div>
+                  <span style={{ fontSize: 11, color: '#6b7280' }}>
+                    Reste dû: <strong style={{ color: '#dc2626' }}>{formatMoney(remaining)}</strong>
+                  </span>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
-                    Montant Encaissé (TND) *
-                  </label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      className="input-field"
-                      type="number"
-                      step="0.001"
-                      required
-                      placeholder={`Max: ${remaining.toFixed(3)}`}
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                    />
+                {/* 1. Payment Nature Selector: Standard vs Acompte / Avance */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, background: '#f1f5f9', padding: 3, borderRadius: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType('standard')}
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: 'none',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: paymentType === 'standard' ? '#ffffff' : 'transparent',
+                      color: paymentType === 'standard' ? '#1e293b' : '#64748b',
+                      boxShadow: paymentType === 'standard' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    Règlement Standard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentType('advance')}
+                    style={{
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: 'none',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      background: paymentType === 'advance' ? '#ffffff' : 'transparent',
+                      color: paymentType === 'advance' ? '#d97706' : '#64748b',
+                      boxShadow: paymentType === 'advance' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 4,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <BadgePercent size={13} /> Acompte / Avance
+                  </button>
+                </div>
+
+                {/* Quick Advance presets if advance payment is chosen */}
+                {paymentType === 'advance' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', background: '#fffbeb', padding: '8px 10px', borderRadius: 6, border: '1px solid #fef3c7' }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#92400e' }}>Acompte rapide :</span>
                     <button
                       type="button"
-                      onClick={() => setAmount(String(remaining))}
+                      onClick={() => setAdvancePercent(0.3)}
                       className="btn btn-secondary btn-sm"
-                      title="Solder le reste dû"
+                      style={{ padding: '2px 8px', fontSize: 11, background: '#ffffff' }}
+                      title="30% du montant total"
                     >
-                      Totalité
+                      30% ({formatMoney(invoice.total * 0.3)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvancePercent(0.5)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 8px', fontSize: 11, background: '#ffffff' }}
+                      title="50% du montant total"
+                    >
+                      50% ({formatMoney(invoice.total * 0.5)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvancePercent(1)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 8px', fontSize: 11, background: '#ffffff' }}
+                      title="Totalité du montant"
+                    >
+                      100%
                     </button>
                   </div>
+                )}
+
+                {/* 2. TVA Option Switch: Direct TTC vs HT + Ajouter TVA */}
+                <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Calculator size={13} color="#4f46e5" />
+                      Option TVA sur le versement
+                    </label>
+                    <div style={{ display: 'inline-flex', gap: 4 }}>
+                      <button
+                        type="button"
+                        onClick={() => setTvaMode('ttc')}
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: 4,
+                          border: tvaMode === 'ttc' ? '1px solid #6366f1' : '1px solid #cbd5e1',
+                          background: tvaMode === 'ttc' ? '#eff6ff' : '#ffffff',
+                          color: tvaMode === 'ttc' ? '#4338ca' : '#64748b',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Montant Direct (TTC)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTvaMode('add_tva')}
+                        style={{
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                          padding: '3px 8px',
+                          borderRadius: 4,
+                          border: tvaMode === 'add_tva' ? '1px solid #6366f1' : '1px solid #cbd5e1',
+                          background: tvaMode === 'add_tva' ? '#eff6ff' : '#ffffff',
+                          color: tvaMode === 'add_tva' ? '#4338ca' : '#64748b',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        + Ajouter TVA (sur HT)
+                      </button>
+                    </div>
+                  </div>
+
+                  {tvaMode === 'add_tva' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 8 }}>
+                        <div>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                            Montant HT (Hors Taxe) *
+                          </label>
+                          <input
+                            className="input-field"
+                            type="number"
+                            step="0.001"
+                            required
+                            placeholder="ex: 1000.000"
+                            value={amountHT}
+                            onChange={(e) => setAmountHT(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                            Taux TVA
+                          </label>
+                          <select
+                            className="input-field"
+                            value={isCustomVat ? 'custom' : String(paymentVatRate)}
+                            onChange={(e) => {
+                              if (e.target.value === 'custom') {
+                                setIsCustomVat(true);
+                              } else {
+                                setIsCustomVat(false);
+                                setPaymentVatRate(Number(e.target.value));
+                              }
+                            }}
+                          >
+                            <option value="0.19">19% (Standard)</option>
+                            <option value="0.07">7% (Réduit)</option>
+                            <option value="0">0% (Sans TVA)</option>
+                            <option value="custom">Autre %</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {isCustomVat && (
+                        <div>
+                          <label style={{ fontSize: 11, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                            Pourcentage TVA personnalisé (%)
+                          </label>
+                          <input
+                            className="input-field"
+                            type="number"
+                            step="0.1"
+                            placeholder="ex: 13"
+                            value={customVatRate}
+                            onChange={(e) => setCustomVatRate(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Real-time Calculation Breakdown Box */}
+                      <div
+                        style={{
+                          background: '#ffffff',
+                          padding: '10px 12px',
+                          borderRadius: 6,
+                          border: '1px solid #cbd5e1',
+                          display: 'grid',
+                          gridTemplateColumns: '1fr 1fr 1.2fr',
+                          gap: 6,
+                          textAlign: 'center',
+                          fontSize: 12,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 10.5, color: '#64748b' }}>Base HT</div>
+                          <div style={{ fontWeight: 700, color: '#334155' }}>{formatMoney(computedFromHT.ht)}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10.5, color: '#64748b' }}>TVA ({Math.round(activeVatRate * 100)}%)</div>
+                          <div style={{ fontWeight: 700, color: '#4f46e5' }}>+{formatMoney(computedFromHT.vat)}</div>
+                        </div>
+                        <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 6 }}>
+                          <div style={{ fontSize: 10.5, color: '#64748b' }}>Total TTC Encaissé</div>
+                          <div style={{ fontWeight: 800, color: '#059669', fontSize: 13 }}>
+                            {formatMoney(computedFromHT.ttc)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                        Montant Encaissé TTC (TND) *
+                      </label>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input
+                          className="input-field"
+                          type="number"
+                          step="0.001"
+                          required
+                          placeholder={`Max: ${remaining.toFixed(3)}`}
+                          value={amount}
+                          onChange={(e) => setAmount(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setAmount(String(remaining))}
+                          className="btn btn-secondary btn-sm"
+                          title="Solder le reste dû"
+                        >
+                          Totalité
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
+                {/* 3. Method & Date */}
                 <div className="grid-responsive-2" style={{ gap: 8 }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
@@ -355,25 +677,32 @@ export function InvoiceDetail({
                   </div>
                 </div>
 
+                {/* 4. Reference */}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 4 }}>
-                    Référence / N° Chèque ou Transaction (optionnel)
+                    Référence / Note (optionnel)
                   </label>
                   <input
                     className="input-field"
-                    placeholder="ex: VIR-92840 / CHQ-1082"
+                    placeholder={paymentType === 'advance' ? 'ex: Acompte / Réf: VIR-92840' : 'ex: VIR-92840 / CHQ-1082'}
                     value={reference}
                     onChange={(e) => setReference(e.target.value)}
                   />
                 </div>
 
+                {/* Submit button */}
                 <button
                   type="submit"
-                  disabled={recording || !amount}
+                  disabled={recording || effectiveAmountToRecord <= 0}
                   className="btn btn-primary"
                   style={{ marginTop: 4, width: '100%' }}
                 >
-                  <Plus size={14} /> {recording ? 'Enregistrement…' : 'Valider le Règlement & Obtenir Facture'}
+                  <Plus size={14} />{' '}
+                  {recording
+                    ? 'Enregistrement…'
+                    : paymentType === 'advance'
+                    ? `Valider l'Acompte (${formatMoney(effectiveAmountToRecord)}) & Obtenir Facture`
+                    : `Valider le Règlement (${formatMoney(effectiveAmountToRecord)}) & Obtenir Facture`}
                 </button>
               </form>
             ) : (

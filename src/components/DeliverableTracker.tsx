@@ -50,16 +50,57 @@ export function DeliverableTracker({
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
   const [editingLinkVal, setEditingLinkVal] = useState<string>('');
+  const [editingIgLinkVal, setEditingIgLinkVal] = useState<string>('');
+  const [editingTtLinkVal, setEditingTtLinkVal] = useState<string>('');
   const [syncNotification, setSyncNotification] = useState<{ id: string; msg: string; isError?: boolean } | null>(null);
+
+  // Post name editing state
+  const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
+  const [editingIdeaVal, setEditingIdeaVal] = useState<string>('');
+
+  // Full deliverable edit modal state
+  const [editingDeliverable, setEditingDeliverable] = useState<DeliverableData | null>(null);
+  const [editForm, setEditForm] = useState<{
+    idea: string;
+    platform: Platform;
+    format: DeliverableFormat;
+    instagramLink: string;
+    tiktokLink: string;
+    link: string;
+    filmingDate: string;
+    publishDate: string;
+    publishTime: string;
+    filmed: boolean;
+    published: boolean;
+    status: DeliverableStatus;
+    creatorId: string;
+  }>({
+    idea: '',
+    platform: 'instagram',
+    format: 'reel',
+    instagramLink: '',
+    tiktokLink: '',
+    link: '',
+    filmingDate: '',
+    publishDate: '',
+    publishTime: '',
+    filmed: false,
+    published: false,
+    status: 'idea',
+    creatorId: '',
+  });
+  const [savingDeliverableEdit, setSavingDeliverableEdit] = useState(false);
 
   // Form state for new deliverable
   const [idea, setIdea] = useState('');
   const [format, setFormat] = useState<DeliverableFormat>('reel');
-  const [platform, setPlatform] = useState<Platform>('instagram');
+  const [platform, setPlatform] = useState<Platform>('both');
   const [filmingDate, setFilmingDate] = useState('');
   const [publishDate, setPublishDate] = useState('');
   const [publishTime, setPublishTime] = useState('');
   const [link, setLink] = useState('');
+  const [instagramLink, setInstagramLink] = useState('');
+  const [tiktokLink, setTiktokLink] = useState('');
   const [creatorId, setCreatorId] = useState('');
   const [filmed, setFilmed] = useState(false);
   const [status, setStatus] = useState<DeliverableStatus>('idea');
@@ -86,13 +127,30 @@ export function DeliverableTracker({
       const views = data.scraped?.views?.toLocaleString() ?? '0';
       const likes = data.scraped?.likes?.toLocaleString() ?? '0';
       const comments = data.scraped?.comments?.toLocaleString() ?? '0';
-      const platformName = data.scraped?.platform === 'instagram' ? 'Instagram' : data.scraped?.platform === 'tiktok' ? 'TikTok' : 'Apify';
+      const isBoth =
+        data.scraped?.platform === 'both' ||
+        Boolean(data.breakdown?.instagram && data.breakdown?.tiktok);
+
+      let msg = '';
+      if (isBoth) {
+        const igViews = data.breakdown?.instagram?.views?.toLocaleString() ?? '0';
+        const ttViews = data.breakdown?.tiktok?.views?.toLocaleString() ?? '0';
+        msg = `Synced from Instagram & TikTok: ${views} total views (IG: ${igViews} · TikTok: ${ttViews}) · ${likes} likes · ${comments} comments`;
+      } else {
+        const platformName =
+          data.scraped?.platform === 'instagram'
+            ? 'Instagram'
+            : data.scraped?.platform === 'tiktok'
+            ? 'TikTok'
+            : 'Apify';
+        msg = `Synced from ${platformName}: ${views} views · ${likes} likes · ${comments} comments`;
+      }
 
       setSyncNotification({
         id,
-        msg: `Synced from ${platformName}: ${views} views · ${likes} likes · ${comments} comments`,
+        msg,
       });
-      setTimeout(() => setSyncNotification(null), 6000);
+      setTimeout(() => setSyncNotification(null), 7000);
 
       if (onUpdate) onUpdate();
     } catch (err: any) {
@@ -108,19 +166,20 @@ export function DeliverableTracker({
     }
   };
 
-  // Direct save/update deliverable link
-  const handleSaveLink = async (id: string, newLink: string) => {
-    const trimmed = newLink.trim();
+  // Direct save/update deliverable post name (idea)
+  const handleSaveIdea = async (id: string, newIdea: string) => {
+    const trimmed = newIdea.trim();
+    if (!trimmed) return;
     setDeliverables((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, link: trimmed || null } : item))
+      prev.map((item) => (item.id === id ? { ...item, idea: trimmed } : item))
     );
-    setEditingLinkId(null);
+    setEditingIdeaId(null);
 
     try {
       const res = await fetch(`/api/deliverables/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ link: trimmed || null }),
+        body: JSON.stringify({ idea: trimmed }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -128,13 +187,135 @@ export function DeliverableTracker({
           prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
         );
         if (onUpdate) onUpdate();
-        // If a valid link was attached, automatically trigger metric sync!
-        if (trimmed) {
+      }
+    } catch (err) {
+      console.error('Failed to update deliverable name:', err);
+    }
+  };
+
+  // Direct save/update deliverable links (supports single or dual Instagram & TikTok)
+  const handleSaveLinks = async (
+    id: string,
+    igLinkVal?: string,
+    ttLinkVal?: string,
+    singleLinkVal?: string
+  ) => {
+    const igTrimmed = igLinkVal?.trim() || null;
+    const ttTrimmed = ttLinkVal?.trim() || null;
+    const singleTrimmed = singleLinkVal?.trim() || null;
+
+    setDeliverables((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        const isBoth = Boolean((igTrimmed && ttTrimmed) || item.platform === 'both');
+        return {
+          ...item,
+          instagramLink: igTrimmed || item.instagramLink,
+          tiktokLink: ttTrimmed || item.tiktokLink,
+          link: igTrimmed || ttTrimmed || singleTrimmed || item.link,
+          platform: isBoth ? 'both' : item.platform,
+        };
+      })
+    );
+    setEditingLinkId(null);
+
+    try {
+      const payload: Record<string, unknown> = {};
+      if (igTrimmed !== undefined) payload.instagramLink = igTrimmed;
+      if (ttTrimmed !== undefined) payload.tiktokLink = ttTrimmed;
+      if (singleTrimmed !== undefined) payload.link = singleTrimmed;
+      if (igTrimmed && ttTrimmed) payload.platform = 'both';
+
+      const res = await fetch(`/api/deliverables/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setDeliverables((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
+        );
+        if (onUpdate) onUpdate();
+        if (igTrimmed || ttTrimmed || singleTrimmed) {
           handleSyncMetrics(id);
         }
       }
     } catch (err) {
-      console.error('Failed to update deliverable link:', err);
+      console.error('Failed to update deliverable links:', err);
+    }
+  };
+
+  // Open full deliverable edit modal
+  const openEditModal = (d: DeliverableData) => {
+    setEditingDeliverable(d);
+    setEditForm({
+      idea: d.idea,
+      platform: d.platform || 'instagram',
+      format: d.format || 'reel',
+      instagramLink: d.instagramLink || (d.platform === 'instagram' ? d.link || '' : ''),
+      tiktokLink: d.tiktokLink || (d.platform === 'tiktok' ? d.link || '' : ''),
+      link: d.link || '',
+      filmingDate: d.filmingDate || '',
+      publishDate: d.publishDate || '',
+      publishTime: d.publishTime || '',
+      filmed: Boolean(d.filmed),
+      published: Boolean(d.published),
+      status: d.status,
+      creatorId: d.creatorAssignments?.[0]?.creator?.id || '',
+    });
+  };
+
+  // Save changes from full deliverable edit modal
+  const handleSaveFullEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDeliverable || !editForm.idea.trim()) return;
+
+    setSavingDeliverableEdit(true);
+    try {
+      const isBoth =
+        editForm.platform === 'both' ||
+        Boolean(editForm.instagramLink.trim() && editForm.tiktokLink.trim());
+
+      const payload: Record<string, unknown> = {
+        idea: editForm.idea.trim(),
+        platform: isBoth ? 'both' : editForm.platform,
+        format: editForm.format,
+        instagramLink: editForm.instagramLink.trim() || null,
+        tiktokLink: editForm.tiktokLink.trim() || null,
+        link: editForm.link.trim() || null,
+        filmingDate: editForm.filmingDate || null,
+        publishDate: editForm.publishDate || null,
+        publishTime: editForm.publishTime || null,
+        filmed: editForm.filmed,
+        published: editForm.published,
+        status: editForm.status,
+      };
+
+      const res = await fetch(`/api/deliverables/${editingDeliverable.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to update deliverable');
+      }
+
+      const updated = await res.json();
+      setDeliverables((prev) =>
+        prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item))
+      );
+      setEditingDeliverable(null);
+      if (onUpdate) onUpdate();
+      if (editForm.instagramLink || editForm.tiktokLink || editForm.link) {
+        handleSyncMetrics(updated.id);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error updating deliverable');
+    } finally {
+      setSavingDeliverableEdit(false);
     }
   };
 
@@ -312,6 +493,8 @@ export function DeliverableTracker({
           publishDate: publishDate || null,
           publishTime: publishTime || null,
           link: link.trim() || null,
+          instagramLink: instagramLink.trim() || null,
+          tiktokLink: tiktokLink.trim() || null,
           creatorId: creatorId || null,
           filmed,
           published: status === 'published',
@@ -324,6 +507,8 @@ export function DeliverableTracker({
         setDeliverables((prev) => [created, ...prev]);
         setIdea('');
         setLink('');
+        setInstagramLink('');
+        setTiktokLink('');
         setFilmingDate('');
         setPublishDate('');
         setPublishTime('');
@@ -332,7 +517,7 @@ export function DeliverableTracker({
         setStatus('idea');
         setIsAdding(false);
         if (onUpdate) onUpdate();
-        if (created.link) {
+        if (created.link || created.instagramLink || created.tiktokLink) {
           handleSyncMetrics(created.id);
         }
       }
@@ -411,6 +596,7 @@ export function DeliverableTracker({
     tiktok: { bg: '#ecfeff', text: '#0891b2' },
     youtube: { bg: '#fef2f2', text: '#dc2626' },
     facebook: { bg: '#eff6ff', text: '#2563eb' },
+    both: { bg: '#f5f3ff', text: '#7c3aed' },
   };
 
   const formatDateDisplay = (dateStr: string | null) => {
@@ -754,8 +940,9 @@ export function DeliverableTracker({
                 onChange={(e) => setPlatform(e.target.value as Platform)}
                 className="input-field"
               >
-                <option value="instagram">Instagram</option>
-                <option value="tiktok">TikTok</option>
+                <option value="both">Instagram & TikTok (Both)</option>
+                <option value="instagram">Instagram Only</option>
+                <option value="tiktok">TikTok Only</option>
                 <option value="youtube">YouTube</option>
                 <option value="facebook">Facebook</option>
               </select>
@@ -827,18 +1014,79 @@ export function DeliverableTracker({
               </select>
             </div>
 
-            <div>
-              <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
-                Live URL (Optional)
-              </label>
-              <input
-                type="url"
-                placeholder="https://..."
-                value={link}
-                onChange={(e) => setLink(e.target.value)}
-                className="input-field"
-              />
-            </div>
+            {platform === 'both' ? (
+              <>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#db2777', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                    <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://www.instagram.com/reel/..."
+                    value={instagramLink}
+                    onChange={(e) => setInstagramLink(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: '#0891b2', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                    <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://www.tiktok.com/@.../video/..."
+                    value={tiktokLink}
+                    onChange={(e) => setTiktokLink(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+              </>
+            ) : platform === 'instagram' ? (
+              <div>
+                <label style={{ fontSize: '11px', color: '#db2777', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                  <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://www.instagram.com/reel/..."
+                  value={instagramLink || link}
+                  onChange={(e) => {
+                    setInstagramLink(e.target.value);
+                    setLink(e.target.value);
+                  }}
+                  className="input-field"
+                />
+              </div>
+            ) : platform === 'tiktok' ? (
+              <div>
+                <label style={{ fontSize: '11px', color: '#0891b2', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '3px', fontWeight: 700 }}>
+                  <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://www.tiktok.com/@.../video/..."
+                  value={tiktokLink || link}
+                  onChange={(e) => {
+                    setTiktokLink(e.target.value);
+                    setLink(e.target.value);
+                  }}
+                  className="input-field"
+                />
+              </div>
+            ) : (
+              <div>
+                <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '3px', fontWeight: 600 }}>
+                  Live URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://..."
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  className="input-field"
+                />
+              </div>
+            )}
           </div>
 
           {/* Workflow Stage & Filmed Checkbox */}
@@ -1102,78 +1350,278 @@ export function DeliverableTracker({
 
                     {/* Idea / Concept */}
                     <td>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '13px' }}>{d.idea}</div>
-
-                      {/* Inline Link Editor or Display */}
-                      {editingLinkId === d.id ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                      {editingIdeaId === d.id ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
                           <input
-                            type="url"
-                            placeholder="Paste Instagram or TikTok link..."
-                            value={editingLinkVal}
-                            onChange={(e) => setEditingLinkVal(e.target.value)}
+                            type="text"
+                            value={editingIdeaVal}
+                            onChange={(e) => setEditingIdeaVal(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') handleSaveLink(d.id, editingLinkVal);
-                              if (e.key === 'Escape') setEditingLinkId(null);
+                              if (e.key === 'Enter') handleSaveIdea(d.id, editingIdeaVal);
+                              if (e.key === 'Escape') setEditingIdeaId(null);
                             }}
                             autoFocus
+                            placeholder="Post concept / title..."
                             style={{
-                              fontSize: '11px',
-                              padding: '2px 6px',
-                              border: '1px solid #2563eb',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              padding: '3px 8px',
+                              border: '1px solid #7c3aed',
                               borderRadius: '4px',
-                              width: '210px',
+                              width: '230px',
                             }}
                           />
                           <button
                             type="button"
-                            onClick={() => handleSaveLink(d.id, editingLinkVal)}
+                            onClick={() => handleSaveIdea(d.id, editingIdeaVal)}
                             style={{
                               border: 'none',
-                              background: '#2563eb',
+                              background: '#7c3aed',
                               color: '#fff',
                               borderRadius: '4px',
-                              padding: '2px 5px',
+                              padding: '3px 6px',
                               cursor: 'pointer',
+                              display: 'inline-flex',
                             }}
-                            title="Save & Sync"
+                            title="Save post name"
                           >
-                            <Check size={11} />
+                            <Check size={12} />
                           </button>
                           <button
                             type="button"
-                            onClick={() => setEditingLinkId(null)}
+                            onClick={() => setEditingIdeaId(null)}
                             style={{
                               border: 'none',
                               background: '#f3f4f6',
                               color: '#6b7280',
                               borderRadius: '4px',
-                              padding: '2px 5px',
+                              padding: '3px 6px',
                               cursor: 'pointer',
+                              display: 'inline-flex',
                             }}
                             title="Cancel"
                           >
-                            <X size={11} />
+                            <X size={12} />
                           </button>
                         </div>
-                      ) : d.link ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: '3px', flexWrap: 'wrap' }}>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 600, color: '#111827', fontSize: '13px' }}>{d.idea}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingIdeaId(d.id);
+                              setEditingIdeaVal(d.idea || '');
+                            }}
+                            style={{
+                              border: 'none',
+                              background: 'none',
+                              padding: '2px',
+                              color: '#9ca3af',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                            }}
+                            title="Edit post name"
+                          >
+                            <Edit2 size={11} />
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Inline Link Editor or Display */}
+                      {editingLinkId === d.id ? (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                            marginTop: 6,
+                            background: '#f8fafc',
+                            padding: '8px 10px',
+                            borderRadius: 6,
+                            border: '1px solid #cbd5e1',
+                            maxWidth: '320px',
+                          }}
+                        >
+                          <div style={{ fontSize: '11px', fontWeight: 600, color: '#475569', marginBottom: 2 }}>
+                            Attach Instagram / TikTok Links:
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <InstagramIcon size={13} color="#db2777" />
+                            <input
+                              type="url"
+                              placeholder="Instagram reel / post URL..."
+                              value={editingIgLinkVal}
+                              onChange={(e) => setEditingIgLinkVal(e.target.value)}
+                              style={{
+                                fontSize: '11px',
+                                padding: '3px 6px',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '4px',
+                                width: '100%',
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <TikTokIcon size={13} color="#0891b2" />
+                            <input
+                              type="url"
+                              placeholder="TikTok video URL..."
+                              value={editingTtLinkVal}
+                              onChange={(e) => setEditingTtLinkVal(e.target.value)}
+                              style={{
+                                fontSize: '11px',
+                                padding: '3px 6px',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '4px',
+                                width: '100%',
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 4 }}>
+                            <button
+                              type="button"
+                              onClick={() => setEditingLinkId(null)}
+                              className="btn btn-ghost btn-xs"
+                              style={{ fontSize: '11px', padding: '2px 6px' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSaveLinks(d.id, editingIgLinkVal, editingTtLinkVal)}
+                              className="btn btn-primary btn-xs"
+                              style={{ fontSize: '11px', padding: '2px 8px' }}
+                            >
+                              Save & Sync
+                            </button>
+                          </div>
+                        </div>
+                      ) : d.instagramLink && d.tiktokLink ? (
+                        /* BOTH LINKS PRESENT */
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: '4px', flexWrap: 'wrap' }}>
                           <a
-                            href={d.link}
+                            href={d.instagramLink}
                             target="_blank"
                             rel="noreferrer"
                             style={{
                               fontSize: '11px',
-                              color: '#4f46e5',
+                              color: '#db2777',
+                              backgroundColor: '#fdf2f8',
+                              border: '1px solid #fbcfe8',
+                              padding: '1.5px 6px',
+                              borderRadius: '4px',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '3px',
                               textDecoration: 'none',
-                              fontWeight: 500,
+                              fontWeight: 600,
+                            }}
+                            title="Open Instagram Post"
+                          >
+                            <InstagramIcon size={11} color="#db2777" />
+                            <span>Instagram</span>
+                            <ExternalLink size={9} />
+                          </a>
+
+                          <a
+                            href={d.tiktokLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              fontSize: '11px',
+                              color: '#0891b2',
+                              backgroundColor: '#ecfeff',
+                              border: '1px solid #a5f3fc',
+                              padding: '1.5px 6px',
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              textDecoration: 'none',
+                              fontWeight: 600,
+                            }}
+                            title="Open TikTok Video"
+                          >
+                            <TikTokIcon size={11} color="#0891b2" />
+                            <span>TikTok</span>
+                            <ExternalLink size={9} />
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSyncMetrics(d.id)}
+                            disabled={syncingId === d.id}
+                            style={{
+                              fontSize: '10.5px',
+                              fontWeight: 600,
+                              color: '#7c3aed',
+                              background: '#f5f3ff',
+                              border: '1px solid #ddd6fe',
+                              borderRadius: '4px',
+                              padding: '1.5px 6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              cursor: syncingId === d.id ? 'not-allowed' : 'pointer',
+                            }}
+                            title="Fetch numbers from both Instagram and TikTok via Apify"
+                          >
+                            <RefreshCw size={10} className={syncingId === d.id ? 'animate-spin' : ''} />
+                            {syncingId === d.id ? 'Syncing both…' : 'Sync both'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingLinkId(d.id);
+                              setEditingIgLinkVal(d.instagramLink || '');
+                              setEditingTtLinkVal(d.tiktokLink || '');
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              color: '#9ca3af',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                            }}
+                            title="Edit URLs"
+                          >
+                            <Edit2 size={10} />
+                          </button>
+                        </div>
+                      ) : d.link || d.instagramLink || d.tiktokLink ? (
+                        /* SINGLE LINK PRESENT */
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: '3px', flexWrap: 'wrap' }}>
+                          <a
+                            href={d.instagramLink || d.tiktokLink || d.link!}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              fontSize: '11px',
+                              color: d.instagramLink ? '#db2777' : d.tiktokLink ? '#0891b2' : '#4f46e5',
+                              backgroundColor: d.instagramLink ? '#fdf2f8' : d.tiktokLink ? '#ecfeff' : '#eff6ff',
+                              border: `1px solid ${d.instagramLink ? '#fbcfe8' : d.tiktokLink ? '#a5f3fc' : '#bfdbfe'}`,
+                              padding: '1.5px 6px',
+                              borderRadius: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px',
+                              textDecoration: 'none',
+                              fontWeight: 600,
                             }}
                           >
-                            <ExternalLink size={10} />
-                            View Post
+                            {d.instagramLink ? (
+                              <InstagramIcon size={11} color="#db2777" />
+                            ) : d.tiktokLink ? (
+                              <TikTokIcon size={11} color="#0891b2" />
+                            ) : (
+                              <ExternalLink size={10} />
+                            )}
+                            <span>{d.instagramLink ? 'Instagram' : d.tiktokLink ? 'TikTok' : 'View Post'}</span>
+                            <ExternalLink size={9} />
                           </a>
 
                           <button
@@ -1203,7 +1651,8 @@ export function DeliverableTracker({
                             type="button"
                             onClick={() => {
                               setEditingLinkId(d.id);
-                              setEditingLinkVal(d.link || '');
+                              setEditingIgLinkVal(d.instagramLink || (d.platform === 'instagram' ? d.link || '' : ''));
+                              setEditingTtLinkVal(d.tiktokLink || (d.platform === 'tiktok' ? d.link || '' : ''));
                             }}
                             style={{
                               background: 'none',
@@ -1213,18 +1662,20 @@ export function DeliverableTracker({
                               cursor: 'pointer',
                               display: 'inline-flex',
                             }}
-                            title="Edit URL"
+                            title="Edit URL(s)"
                           >
                             <Edit2 size={10} />
                           </button>
                         </div>
                       ) : (
+                        /* NO LINKS YET */
                         <div style={{ marginTop: '3px' }}>
                           <button
                             type="button"
                             onClick={() => {
                               setEditingLinkId(d.id);
-                              setEditingLinkVal('');
+                              setEditingIgLinkVal('');
+                              setEditingTtLinkVal('');
                             }}
                             style={{
                               fontSize: '10.5px',
@@ -1239,7 +1690,7 @@ export function DeliverableTracker({
                             }}
                           >
                             <Link2 size={10} />
-                            <span>+ Attach live link</span>
+                            <span>+ Attach live link(s)</span>
                           </button>
                         </div>
                       )}
@@ -1251,12 +1702,12 @@ export function DeliverableTracker({
                             marginTop: 4,
                             fontSize: '10.5px',
                             fontWeight: 600,
-                            padding: '2px 6px',
+                            padding: '3px 8px',
                             borderRadius: '4px',
                             backgroundColor: syncNotification.isError ? '#fef2f2' : '#ecfdf5',
                             color: syncNotification.isError ? '#dc2626' : '#059669',
                             border: `1px solid ${syncNotification.isError ? '#fecaca' : '#a7f3d0'}`,
-                            maxWidth: '280px',
+                            maxWidth: '320px',
                           }}
                         >
                           {syncNotification.msg}
@@ -1310,7 +1761,40 @@ export function DeliverableTracker({
                     {/* Platform & Format */}
                     <td>
                       <div style={{ display: 'flex', gap: '5px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        {d.platform && (
+                        {d.platform === 'both' || (d.instagramLink && d.tiktokLink) ? (
+                          <div style={{ display: 'inline-flex', gap: 3, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                padding: '1.5px 5px',
+                                borderRadius: '4px',
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                backgroundColor: '#fdf2f8',
+                                color: '#db2777',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                            >
+                              <InstagramIcon size={11} color="#db2777" /> IG
+                            </span>
+                            <span
+                              style={{
+                                padding: '1.5px 5px',
+                                borderRadius: '4px',
+                                fontSize: '10.5px',
+                                fontWeight: 700,
+                                backgroundColor: '#ecfeff',
+                                color: '#0891b2',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 3,
+                              }}
+                            >
+                              <TikTokIcon size={11} color="#0891b2" /> TikTok
+                            </span>
+                          </div>
+                        ) : d.platform ? (
                           <span
                             style={{
                               padding: '2px 7px',
@@ -1329,7 +1813,7 @@ export function DeliverableTracker({
                             {d.platform === 'tiktok' && <TikTokIcon size={12} color="#0891b2" />}
                             <span>{d.platform}</span>
                           </span>
-                        )}
+                        ) : null}
                         {d.format && (
                           <span
                             style={{
@@ -1406,12 +1890,12 @@ export function DeliverableTracker({
                                   borderRadius: '3px',
                                   padding: '1px 4px',
                                 }}
-                                title="Auto-synced from Apify"
+                                title={d.latestMetrics.note || 'Auto-synced from Apify'}
                               >
                                 API
                               </span>
                             )}
-                            {d.link && (
+                            {(d.link || d.instagramLink || d.tiktokLink) && (
                               <button
                                 type="button"
                                 onClick={() => handleSyncMetrics(d.id)}
@@ -1431,7 +1915,7 @@ export function DeliverableTracker({
                               </button>
                             )}
                           </div>
-                        ) : d.link ? (
+                        ) : (d.link || d.instagramLink || d.tiktokLink) ? (
                           <button
                             type="button"
                             onClick={() => handleSyncMetrics(d.id)}
@@ -1460,14 +1944,24 @@ export function DeliverableTracker({
 
                     {/* Actions */}
                     <td style={{ textAlign: 'right', paddingRight: '16px' }}>
-                      <button
-                        onClick={() => handleDelete(d.id)}
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: '#9ca3af', padding: '3px' }}
-                        title="Delete deliverable"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <button
+                          onClick={() => openEditModal(d)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: '#4f46e5', padding: '3px 6px' }}
+                          title="Edit deliverable & links"
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(d.id)}
+                          className="btn btn-ghost btn-sm"
+                          style={{ color: '#9ca3af', padding: '3px 6px' }}
+                          title="Delete deliverable"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1476,6 +1970,264 @@ export function DeliverableTracker({
           </tbody>
         </table>
       </div>
+
+      {/* FULL DELIVERABLE EDIT MODAL */}
+      {editingDeliverable && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: '540px', padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Edit2 size={16} color="#4f46e5" />
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', margin: 0 }}>
+                  Edit Deliverable
+                </h3>
+              </div>
+              <button
+                onClick={() => setEditingDeliverable(null)}
+                className="btn btn-ghost btn-sm"
+                style={{ padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveFullEdit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Concept / Post Name */}
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                  Post Concept / Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.idea}
+                  onChange={(e) => setEditForm({ ...editForm, idea: e.target.value })}
+                  placeholder="e.g. 3-Step Night Routine Macro UGC"
+                  className="input-field"
+                  style={{ fontSize: '13px', fontWeight: 600 }}
+                />
+              </div>
+
+              {/* Platform & Format */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                    Platform Selection
+                  </label>
+                  <select
+                    value={editForm.platform}
+                    onChange={(e) => setEditForm({ ...editForm, platform: e.target.value as Platform })}
+                    className="input-field"
+                  >
+                    <option value="both">Instagram & TikTok (Both)</option>
+                    <option value="instagram">Instagram Only</option>
+                    <option value="tiktok">TikTok Only</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="facebook">Facebook</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                    Format
+                  </label>
+                  <select
+                    value={editForm.format}
+                    onChange={(e) => setEditForm({ ...editForm, format: e.target.value as DeliverableFormat })}
+                    className="input-field"
+                  >
+                    <option value="reel">Reel / Short</option>
+                    <option value="photo">Photo Still</option>
+                    <option value="carousel">Carousel</option>
+                    <option value="story">Story</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* URL Inputs based on Platform */}
+              {editForm.platform === 'both' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#db2777', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                      <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://instagram.com/reel/..."
+                      value={editForm.instagramLink}
+                      onChange={(e) => setEditForm({ ...editForm, instagramLink: e.target.value })}
+                      className="input-field"
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: '#0891b2', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                      <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://tiktok.com/@.../video/..."
+                      value={editForm.tiktokLink}
+                      onChange={(e) => setEditForm({ ...editForm, tiktokLink: e.target.value })}
+                      className="input-field"
+                      style={{ fontSize: '12px' }}
+                    />
+                  </div>
+                </div>
+              ) : editForm.platform === 'instagram' ? (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#db2777', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                    <InstagramIcon size={12} color="#db2777" /> Instagram URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://instagram.com/reel/..."
+                    value={editForm.instagramLink || editForm.link}
+                    onChange={(e) => setEditForm({ ...editForm, instagramLink: e.target.value, link: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              ) : editForm.platform === 'tiktok' ? (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#0891b2', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                    <TikTokIcon size={12} color="#0891b2" /> TikTok URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://tiktok.com/@.../video/..."
+                    value={editForm.tiktokLink || editForm.link}
+                    onChange={(e) => setEditForm({ ...editForm, tiktokLink: e.target.value, link: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '4px' }}>
+                    Live URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={editForm.link}
+                    onChange={(e) => setEditForm({ ...editForm, link: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              )}
+
+              {/* Dates & Schedule */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.8fr', gap: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                    <Film size={12} /> Filming Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.filmingDate}
+                    onChange={(e) => setEditForm({ ...editForm, filmingDate: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                    <Send size={12} /> Posting Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.publishDate}
+                    onChange={(e) => setEditForm({ ...editForm, publishDate: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 700, color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4, marginBottom: '4px' }}>
+                    <Clock size={12} /> Time
+                  </label>
+                  <input
+                    type="time"
+                    value={editForm.publishTime}
+                    onChange={(e) => setEditForm({ ...editForm, publishTime: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              {/* Workflow Status & Quick Checks */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 10 }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '3px' }}>
+                    Stage:
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => {
+                      const s = e.target.value as DeliverableStatus;
+                      setEditForm({
+                        ...editForm,
+                        status: s,
+                        filmed: s === 'filmed' || s === 'editing' || s === 'scheduled' || s === 'published' || editForm.filmed,
+                        published: s === 'published' || editForm.published,
+                      });
+                    }}
+                    className="input-field"
+                    style={{ padding: '3px 8px', fontSize: '12px' }}
+                  >
+                    <option value="idea">Idea Stage</option>
+                    <option value="scripted">Scripted</option>
+                    <option value="filmed">Filmed</option>
+                    <option value="editing">Editing</option>
+                    <option value="scheduled">Scheduled</option>
+                    <option value="published">Published</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12px', cursor: 'pointer', fontWeight: 600, color: editForm.filmed ? '#059669' : '#64748b' }}>
+                    <input
+                      type="checkbox"
+                      checked={editForm.filmed}
+                      onChange={(e) => setEditForm({ ...editForm, filmed: e.target.checked })}
+                      style={{ accentColor: '#059669' }}
+                    />
+                    Filmed
+                  </label>
+
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: '12px', cursor: 'pointer', fontWeight: 600, color: editForm.published ? '#2563eb' : '#64748b' }}>
+                    <input
+                      type="checkbox"
+                      checked={editForm.published}
+                      onChange={(e) => setEditForm({ ...editForm, published: e.target.checked })}
+                      style={{ accentColor: '#2563eb' }}
+                    />
+                    Published
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingDeliverable(null)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingDeliverableEdit}
+                  className="btn btn-primary btn-sm"
+                >
+                  {savingDeliverableEdit ? 'Saving...' : 'Save Deliverable'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

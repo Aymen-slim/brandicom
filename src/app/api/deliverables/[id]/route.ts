@@ -13,6 +13,7 @@ import {
   getDeliverableSelect,
   logActivity,
 } from '@/lib/data';
+import { serializeDeliverableLinks } from '@/lib/deliverables';
 
 export async function PATCH(
   request: NextRequest,
@@ -41,6 +42,8 @@ export async function PATCH(
       caption,
       hook,
       scheduledAt,
+      instagramLink,
+      tiktokLink,
     } = body;
 
     const dataToUpdate: Record<string, unknown> = {};
@@ -69,14 +72,23 @@ export async function PATCH(
         dataToUpdate.status = 'published';
       }
     }
-    if (link !== undefined) {
-      dataToUpdate.link = typeof link === 'string' && link.trim() !== '' ? link.trim() : null;
+    if (link !== undefined || instagramLink !== undefined || tiktokLink !== undefined) {
+      dataToUpdate.link = serializeDeliverableLinks({
+        instagramLink,
+        tiktokLink,
+        link,
+        platform,
+      });
     }
     if (format !== undefined) {
       dataToUpdate.format = format && isDeliverableFormat(format) ? format : null;
     }
     if (platform !== undefined) {
-      dataToUpdate.platform = platform && isPlatform(platform) ? platform : null;
+      if (platform === 'both' || (instagramLink && tiktokLink)) {
+        dataToUpdate.platform = 'instagram'; // Valid PostgreSQL enum value
+      } else {
+        dataToUpdate.platform = platform && isPlatform(platform) ? platform : null;
+      }
     }
     if (results !== undefined) {
       dataToUpdate.results = typeof results === 'string' && results.trim() !== '' ? results.trim() : null;
