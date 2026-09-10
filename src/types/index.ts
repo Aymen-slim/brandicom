@@ -180,6 +180,22 @@ export interface ClientMonthlyGoals {
   selectedFormats?: string[];
 }
 
+export type InspirationPlatform = 'instagram' | 'tiktok' | 'youtube' | 'facebook' | 'other';
+export type InspirationFormat = 'reel' | 'video' | 'photo' | 'carousel';
+
+export interface InspirationIdea {
+  id: string;
+  clientId?: string;
+  title: string;
+  url: string;
+  platform?: InspirationPlatform;
+  format?: InspirationFormat;
+  notes?: string;
+  thumbnailUrl?: string | null;
+  createdAt: string;
+  createdBy?: string;
+}
+
 export interface ClientData {
   id: string;
   name: string;
@@ -201,6 +217,7 @@ export interface ClientData {
   notes: string | null;
   createdAt: string;
   monthlyGoals?: ClientMonthlyGoals;
+  inspirations?: InspirationIdea[];
   contract?: ClientContractData | null;
   socialAccounts?: SocialAccountData[];
   health?: ClientHealthData | null;

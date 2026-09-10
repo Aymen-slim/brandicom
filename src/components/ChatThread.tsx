@@ -2,15 +2,16 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageData, UserSummary } from '@/types';
-import { Send } from 'lucide-react';
+import { Send, ExternalLink, Lightbulb } from 'lucide-react';
 
 interface ChatThreadProps {
   clientId: string;
   initialMessages?: MessageData[];
   user?: UserSummary | null;
+  onSaveInspiration?: (url: string) => void;
 }
 
-export function ChatThread({ clientId, initialMessages = [], user: currentUser }: ChatThreadProps) {
+export function ChatThread({ clientId, initialMessages = [], user: currentUser, onSaveInspiration }: ChatThreadProps) {
 
   const [messages, setMessages] = useState<MessageData[]>(initialMessages);
   const [inputText, setInputText] = useState('');
@@ -117,6 +118,57 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser }
     } catch {
       return '';
     }
+  };
+
+  const renderMessageBody = (body: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = body.split(urlRegex);
+
+    return parts.map((part, idx) => {
+      if (part.match(urlRegex)) {
+        const isVideoOrReel = /(instagram\.com|tiktok\.com|youtube\.com|youtu\.be)/i.test(part);
+        return (
+          <span key={idx} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', margin: '2px 0' }}>
+            <a
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                color: '#4338ca',
+                fontWeight: 600,
+                textDecoration: 'underline',
+                wordBreak: 'break-all',
+              }}
+            >
+              {part} <ExternalLink size={10} style={{ display: 'inline', marginLeft: 2 }} />
+            </a>
+            {isVideoOrReel && onSaveInspiration && (
+              <button
+                type="button"
+                onClick={() => onSaveInspiration(part)}
+                className="btn btn-ghost btn-xs"
+                style={{
+                  padding: '1px 5px',
+                  fontSize: '9.5px',
+                  color: '#db2777',
+                  backgroundColor: '#fdf2f8',
+                  borderRadius: 4,
+                  border: '1px solid #fbcfe8',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  cursor: 'pointer',
+                }}
+                title="Save this video/reel link to client inspiration ideas"
+              >
+                <Lightbulb size={9} /> Save to Inspiration
+              </button>
+            )}
+          </span>
+        );
+      }
+      return <span key={idx}>{part}</span>;
+    });
   };
 
   return (
@@ -270,7 +322,7 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser }
                       wordBreak: 'break-word',
                     }}
                   >
-                    {m.body}
+                    {renderMessageBody(m.body)}
                   </div>
                 </div>
 

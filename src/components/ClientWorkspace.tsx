@@ -8,6 +8,7 @@ import { DeliverableTracker } from './DeliverableTracker';
 import { ClientGoalsProgressBar } from './ClientGoalsProgressBar';
 import { computeClientGoalsProgress } from '@/lib/clientGoals';
 import { ChatThread } from './ChatThread';
+import { ClientInspirationBoard } from './ClientInspirationBoard';
 import { MetricsEntryModal } from './MetricsEntryModal';
 import dynamic from 'next/dynamic';
 import { formatMoney, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
@@ -233,7 +234,7 @@ export function ClientWorkspace({
     { id: 'engagement', label: 'Engagement' },
     { id: 'partners', label: 'Partners' },
     { id: 'finance', label: 'Finance', hide: !isAdmin },
-    { id: 'chat', label: 'Chat' },
+    { id: 'chat', label: 'Chat & Inspiration' },
   ];
 
   const published = deliverables.filter(
@@ -1425,15 +1426,38 @@ export function ClientWorkspace({
       )}
 
       {tab === 'chat' && (
-        <div className="grid-responsive-2" style={{ gap: 16 }}>
-          <ChatThread clientId={currentClient.id} initialMessages={messages} user={user} />
-          <div className="glass-card" style={{ padding: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <FileText size={14} />
-              <strong>Notes</strong>
-            </div>
-            <p style={{ fontSize: 13, color: '#4b5563' }}>{currentClient.notes || 'No notes.'}</p>
-          </div>
+        <div className="grid-responsive-2" style={{ gap: 16, alignItems: 'start' }}>
+          <ChatThread
+            clientId={currentClient.id}
+            initialMessages={messages}
+            user={user}
+            onSaveInspiration={async (savedUrl) => {
+              try {
+                const res = await fetch(`/api/clients/${currentClient.id}/inspirations`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url: savedUrl }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setCurrentClient((prev) => ({
+                    ...prev,
+                    tags: data.tags || prev.tags,
+                    inspirations: data.inspirations,
+                  }));
+                  alert('Saved reel/video link to Inspiration Ideas!');
+                }
+              } catch (err) {
+                console.error('Failed to save inspiration from chat:', err);
+              }
+            }}
+          />
+          <ClientInspirationBoard
+            client={currentClient}
+            user={user}
+            onClientUpdated={(updated) => setCurrentClient(updated)}
+            onDeliverableAdded={refreshDeliverables}
+          />
         </div>
       )}
 

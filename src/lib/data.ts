@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from './supabase/server';
 import { CurrentUser } from './permissions';
 import { parseDeliverableLinks } from './deliverables';
 import { extractClientMonthlyGoals, packClientMonthlyGoals } from './clientGoals';
+import { extractClientInspirations } from './clientInspirations';
 import {
   AssignmentStatus,
   ClientAssignmentData,
@@ -181,6 +182,7 @@ export function mapClientRow(row: any, opts?: { contract?: ClientContractData | 
     notes: row.notes,
     createdAt: row.created_at,
     monthlyGoals: extractClientMonthlyGoals(row.tags || []),
+    inspirations: extractClientInspirations(row.tags || []),
     socialAccounts: (row.client_social_accounts || []).map((s: any) => {
       const base = mapSocial(s);
       const tagPrefix = `baseline:${s.platform}:`;
