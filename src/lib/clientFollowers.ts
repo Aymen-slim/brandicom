@@ -164,7 +164,7 @@ export function extractClientFollowerHistory(
       current.prevTotal = prevTotal;
       current.prevMonth = prevMonth;
       current.gainFromPrevMonth = current.total - prevTotal;
-      current.gainPct = prevTotal > 0 ? (current.gainFromPrevMonth / prevTotal) * 100 : 0;
+      current.gainPct = (prevTotal > 0 && current.gainFromPrevMonth != null) ? (current.gainFromPrevMonth / prevTotal) * 100 : null;
       current.igGain = (current.instagram != null && prevIg != null) ? current.instagram - prevIg : null;
       current.ttGain = (current.tiktok != null && prevTt != null) ? current.tiktok - prevTt : null;
     }

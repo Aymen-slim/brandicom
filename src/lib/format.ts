@@ -160,4 +160,32 @@ export function getProxiedImageUrl(url?: string | null): string {
   return trimmed;
 }
 
+/**
+ * Formats a follower growth delta and percentage cleanly without divide-by-zero or bogus 0.0% artifacts:
+ * e.g. (1200, 10000) -> { diffText: "+1 200", pctText: "(+12.0%)", isPositive: true }
+ * e.g. (15000, 0) -> { diffText: "+15 000", pctText: "", isPositive: true }
+ */
+export function formatFollowerGrowth(
+  diff: number | null | undefined,
+  base: number | null | undefined
+): { diffText: string; pctText: string; isPositive: boolean } {
+  if (diff == null || !Number.isFinite(diff)) {
+    return { diffText: '—', pctText: '', isPositive: true };
+  }
+  const isPositive = diff >= 0;
+  const sign = isPositive ? '+' : '';
+  const diffText = `${sign}${formatNumber(diff)}`;
+
+  if (base != null && base > 0) {
+    const rawPct = (diff / base) * 100;
+    if (Number.isFinite(rawPct)) {
+      const pctSign = rawPct >= 0 ? '+' : '';
+      return { diffText, pctText: `(${pctSign}${rawPct.toFixed(1)}%)`, isPositive };
+    }
+  }
+
+  return { diffText, pctText: '', isPositive };
+}
+
+
 

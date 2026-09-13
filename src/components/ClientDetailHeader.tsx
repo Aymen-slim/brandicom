@@ -714,7 +714,7 @@ export function ClientDetailHeader({
                       >
                         <TrendingUp size={13} />
                         <span>
-                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} followers ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} followers ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
                         </span>
                       </div>
                     );
@@ -1224,29 +1224,50 @@ export function ClientDetailHeader({
                   {(() => {
                     const cur = parseFollowerInput(igFollowers);
                     const base = parseFollowerInput(igInitialFollowers);
-                    if (base != null && cur != null) {
-                      const diff = cur - base;
-                      const pct = base > 0 ? (diff / base) * 100 : 0;
+                    if (cur != null) {
+                      if (base != null && base > 0) {
+                        const diff = cur - base;
+                        const pct = (diff / base) * 100;
+                        return (
+                          <div
+                            style={{
+                              marginTop: 10,
+                              padding: '6px 10px',
+                              borderRadius: '5px',
+                              backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                              border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                              fontSize: '11.5px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <span style={{ color: diff >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
+                              Net Instagram Growth:
+                            </span>
+                            <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
+                              {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                            </span>
+                          </div>
+                        );
+                      }
                       return (
                         <div
                           style={{
                             marginTop: 10,
                             padding: '6px 10px',
                             borderRadius: '5px',
-                            backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
-                            border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
-                            fontSize: '11.5px',
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '11px',
+                            color: '#64748b',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                           }}
                         >
-                          <span style={{ color: diff >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
-                            Net Instagram Growth:
-                          </span>
-                          <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
-                            {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
-                          </span>
+                          <span>Starting baseline:</span>
+                          <span style={{ fontStyle: 'italic' }}>Set starting count to track % growth</span>
                         </div>
                       );
                     }
@@ -1363,29 +1384,50 @@ export function ClientDetailHeader({
                   {(() => {
                     const cur = parseFollowerInput(ttFollowers);
                     const base = parseFollowerInput(ttInitialFollowers);
-                    if (base != null && cur != null) {
-                      const diff = cur - base;
-                      const pct = base > 0 ? (diff / base) * 100 : 0;
+                    if (cur != null) {
+                      if (base != null && base > 0) {
+                        const diff = cur - base;
+                        const pct = (diff / base) * 100;
+                        return (
+                          <div
+                            style={{
+                              marginTop: 10,
+                              padding: '6px 10px',
+                              borderRadius: '5px',
+                              backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                              border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                              fontSize: '11.5px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <span style={{ color: diff >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
+                              Net TikTok Growth:
+                            </span>
+                            <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
+                              {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                            </span>
+                          </div>
+                        );
+                      }
                       return (
                         <div
                           style={{
                             marginTop: 10,
                             padding: '6px 10px',
                             borderRadius: '5px',
-                            backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
-                            border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
-                            fontSize: '11.5px',
+                            backgroundColor: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '11px',
+                            color: '#64748b',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
                           }}
                         >
-                          <span style={{ color: diff >= 0 ? '#065f46' : '#991b1b', fontWeight: 600 }}>
-                            Net TikTok Growth:
-                          </span>
-                          <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
-                            {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
-                          </span>
+                          <span>Starting baseline:</span>
+                          <span style={{ fontStyle: 'italic' }}>Set starting count to track % growth</span>
                         </div>
                       );
                     }
@@ -1426,7 +1468,7 @@ export function ClientDetailHeader({
                           </span>
                         </div>
                         <span style={{ fontWeight: 800, color: diff >= 0 ? '#047857' : '#b91c1c' }}>
-                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({diff >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
                         </span>
                       </div>
                     );

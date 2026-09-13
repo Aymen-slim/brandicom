@@ -175,7 +175,7 @@ export async function POST(
 
     if (prevTotal != null && totalCurrentFollowers > 0) {
       monthlyGain = totalCurrentFollowers - prevTotal;
-      monthlyGainPct = prevTotal > 0 ? (monthlyGain / prevTotal) * 100 : 0;
+      monthlyGainPct = (prevTotal > 0 && monthlyGain != null) ? (monthlyGain / prevTotal) * 100 : null;
       monthlyIgGain = (curIg != null && prevIg != null) ? curIg - prevIg : null;
       monthlyTtGain = (curTt != null && prevTt != null) ? curTt - prevTt : null;
     }

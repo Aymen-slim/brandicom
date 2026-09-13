@@ -350,19 +350,22 @@ export function ClientWorkspace({
 
   // Follower Growth Totals
   const igFollowers = existingIg?.followers ?? 0;
-  const igInitial = existingIg?.initialFollowers ?? 0;
-  const igDiff = igFollowers - igInitial;
-  const igGrowthPct = igInitial > 0 ? (igDiff / igInitial) * 100 : 0;
+  const igInitial = existingIg?.initialFollowers ?? null;
+  const hasIgInitial = igInitial != null && igInitial > 0;
+  const igDiff = hasIgInitial ? igFollowers - igInitial : (existingIg?.followers != null ? existingIg.followers : 0);
+  const igGrowthPct = hasIgInitial ? ((igFollowers - igInitial) / igInitial) * 100 : null;
 
   const ttFollowers = existingTt?.followers ?? 0;
-  const ttInitial = existingTt?.initialFollowers ?? 0;
-  const ttDiff = ttFollowers - ttInitial;
-  const ttGrowthPct = ttInitial > 0 ? (ttDiff / ttInitial) * 100 : 0;
+  const ttInitial = existingTt?.initialFollowers ?? null;
+  const hasTtInitial = ttInitial != null && ttInitial > 0;
+  const ttDiff = hasTtInitial ? ttFollowers - ttInitial : (existingTt?.followers != null ? existingTt.followers : 0);
+  const ttGrowthPct = hasTtInitial ? ((ttFollowers - ttInitial) / ttInitial) * 100 : null;
 
   const totalCurrentFollowers = (existingIg?.followers || 0) + (existingTt?.followers || 0);
-  const totalInitialFollowers = (existingIg?.initialFollowers || 0) + (existingTt?.initialFollowers || 0);
-  const totalFollowersDiff = totalCurrentFollowers - totalInitialFollowers;
-  const totalGrowthPct = totalInitialFollowers > 0 ? (totalFollowersDiff / totalInitialFollowers) * 100 : 0;
+  const hasTotalBaseline = hasIgInitial || hasTtInitial;
+  const totalInitialFollowers = (hasIgInitial ? igInitial! : 0) + (hasTtInitial ? ttInitial! : 0);
+  const totalFollowersDiff = hasTotalBaseline ? (totalCurrentFollowers - totalInitialFollowers) : totalCurrentFollowers;
+  const totalGrowthPct = hasTotalBaseline && totalInitialFollowers > 0 ? (totalFollowersDiff / totalInitialFollowers) * 100 : null;
 
   const loadFinance = async () => {
     if (invoices) return;
@@ -507,7 +510,7 @@ export function ClientWorkspace({
                     )}
                     <span>{cleanSocialHandle(s.handle) || s.platform}</span>
                     {s.followers ? <span>· {formatNumber(s.followers)}</span> : null}
-                    {s.initialFollowers != null && s.followers != null && (
+                    {s.initialFollowers != null && s.initialFollowers > 0 && s.followers != null && (
                       <strong style={{ color: s.followers >= s.initialFollowers ? '#059669' : '#dc2626' }}>
                         ({s.followers >= s.initialFollowers ? `+${formatNumber(s.followers - s.initialFollowers)}` : formatNumber(s.followers - s.initialFollowers)})
                       </strong>
@@ -735,43 +738,45 @@ export function ClientWorkspace({
 
               <div
                 style={{
-                  background: totalFollowersDiff >= 0 ? '#f0fdf4' : '#fef2f2',
-                  border: `1px solid ${totalFollowersDiff >= 0 ? '#bbf7d0' : '#fecaca'}`,
+                  background: !hasTotalBaseline ? '#f8fafc' : totalFollowersDiff >= 0 ? '#f0fdf4' : '#fef2f2',
+                  border: `1px solid ${!hasTotalBaseline ? '#e2e8f0' : totalFollowersDiff >= 0 ? '#bbf7d0' : '#fecaca'}`,
                   borderRadius: 8,
                   padding: 14,
                 }}
               >
-                <div style={{ fontSize: 11.5, color: totalFollowersDiff >= 0 ? '#166534' : '#991b1b', fontWeight: 600 }}>
+                <div style={{ fontSize: 11.5, color: !hasTotalBaseline ? '#475569' : totalFollowersDiff >= 0 ? '#166534' : '#991b1b', fontWeight: 600 }}>
                   Net Audience Growth
                 </div>
                 <div
                   style={{
                     fontSize: 22,
                     fontWeight: 800,
-                    color: totalFollowersDiff >= 0 ? '#15803d' : '#b91c1c',
+                    color: !hasTotalBaseline ? '#0f172a' : totalFollowersDiff >= 0 ? '#15803d' : '#b91c1c',
                     marginTop: 2,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 4,
                   }}
                 >
-                  {totalInitialFollowers > 0
+                  {hasTotalBaseline
                     ? `${totalFollowersDiff >= 0 ? '+' : ''}${formatNumber(totalFollowersDiff)}`
                     : totalCurrentFollowers > 0
                     ? formatNumber(totalCurrentFollowers)
                     : '—'}
                 </div>
-                <div style={{ fontSize: 11, color: totalFollowersDiff >= 0 ? '#15803d' : '#b91c1c', marginTop: 2, fontWeight: 600 }}>
-                  {totalInitialFollowers > 0
-                    ? `${totalFollowersDiff >= 0 ? '+' : ''}${totalGrowthPct.toFixed(1)}% total growth`
-                    : 'Set baseline to see %'}
+                <div style={{ fontSize: 11, color: !hasTotalBaseline ? '#64748b' : totalFollowersDiff >= 0 ? '#15803d' : '#b91c1c', marginTop: 2, fontWeight: 600 }}>
+                  {hasTotalBaseline && totalGrowthPct != null
+                    ? `${totalGrowthPct > 0 ? '+' : ''}${totalGrowthPct.toFixed(1)}% total growth`
+                    : totalCurrentFollowers > 0
+                    ? 'Set baseline to see %'
+                    : 'No audience data'}
                 </div>
               </div>
 
               <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14 }}>
                 <div style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Content Yield</div>
                 <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                  {totals.posts > 0 && totalFollowersDiff > 0
+                  {totals.posts > 0 && hasTotalBaseline && totalFollowersDiff > 0
                     ? `+${formatNumber(Math.round(totalFollowersDiff / totals.posts))}`
                     : '—'}
                 </div>
@@ -848,7 +853,7 @@ export function ClientWorkspace({
                     <div>
                       <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Starting Baseline</span>
                       <strong style={{ fontSize: 14, color: '#1e293b' }}>
-                        {existingIg?.initialFollowers != null ? formatNumber(existingIg.initialFollowers) : '—'}
+                        {hasIgInitial ? formatNumber(existingIg!.initialFollowers) : 'Not set'}
                       </strong>
                     </div>
                     <div>
@@ -859,7 +864,7 @@ export function ClientWorkspace({
                     </div>
                     <div>
                       <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Growth</span>
-                      {existingIg?.initialFollowers != null && existingIg?.followers != null ? (
+                      {hasIgInitial && existingIg?.followers != null ? (
                         <span
                           style={{
                             fontSize: 12,
@@ -867,7 +872,16 @@ export function ClientWorkspace({
                             color: igDiff >= 0 ? '#059669' : '#dc2626',
                           }}
                         >
-                          {igDiff >= 0 ? `+${formatNumber(igDiff)}` : formatNumber(igDiff)} ({igDiff >= 0 ? `+${igGrowthPct.toFixed(1)}%` : `${igGrowthPct.toFixed(1)}%`})
+                          {igDiff >= 0 ? `+${formatNumber(igDiff)}` : formatNumber(igDiff)}
+                          {igGrowthPct != null && (
+                            <span style={{ fontSize: 11, opacity: 0.9, marginLeft: 4 }}>
+                              ({igGrowthPct > 0 ? `+${igGrowthPct.toFixed(1)}%` : `${igGrowthPct.toFixed(1)}%`})
+                            </span>
+                          )}
+                        </span>
+                      ) : existingIg?.followers != null ? (
+                        <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>
+                          Set baseline for %
                         </span>
                       ) : (
                         <span style={{ fontSize: 12, color: '#94a3b8' }}>—</span>
@@ -947,7 +961,7 @@ export function ClientWorkspace({
                     <div>
                       <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Starting Baseline</span>
                       <strong style={{ fontSize: 14, color: '#1e293b' }}>
-                        {existingTt?.initialFollowers != null ? formatNumber(existingTt.initialFollowers) : '—'}
+                        {hasTtInitial ? formatNumber(existingTt!.initialFollowers) : 'Not set'}
                       </strong>
                     </div>
                     <div>
@@ -958,7 +972,7 @@ export function ClientWorkspace({
                     </div>
                     <div>
                       <span style={{ fontSize: 10.5, color: '#64748b', display: 'block' }}>Growth</span>
-                      {existingTt?.initialFollowers != null && existingTt?.followers != null ? (
+                      {hasTtInitial && existingTt?.followers != null ? (
                         <span
                           style={{
                             fontSize: 12,
@@ -966,7 +980,16 @@ export function ClientWorkspace({
                             color: ttDiff >= 0 ? '#059669' : '#dc2626',
                           }}
                         >
-                          {ttDiff >= 0 ? `+${formatNumber(ttDiff)}` : formatNumber(ttDiff)} ({ttDiff >= 0 ? `+${ttGrowthPct.toFixed(1)}%` : `${ttGrowthPct.toFixed(1)}%`})
+                          {ttDiff >= 0 ? `+${formatNumber(ttDiff)}` : formatNumber(ttDiff)}
+                          {ttGrowthPct != null && (
+                            <span style={{ fontSize: 11, opacity: 0.9, marginLeft: 4 }}>
+                              ({ttGrowthPct > 0 ? `+${ttGrowthPct.toFixed(1)}%` : `${ttGrowthPct.toFixed(1)}%`})
+                            </span>
+                          )}
+                        </span>
+                      ) : existingTt?.followers != null ? (
+                        <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>
+                          Set baseline for %
                         </span>
                       ) : (
                         <span style={{ fontSize: 12, color: '#94a3b8' }}>—</span>
@@ -1082,7 +1105,7 @@ export function ClientWorkspace({
                                   {gain >= 0 ? `+${formatNumber(gain)}` : formatNumber(gain)}
                                   {pct != null && (
                                     <span style={{ fontSize: 10.5, opacity: 0.9 }}>
-                                      ({gain >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                                      ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
                                     </span>
                                   )}
                                 </span>
