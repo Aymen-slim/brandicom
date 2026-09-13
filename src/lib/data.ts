@@ -3,6 +3,7 @@ import { CurrentUser } from './permissions';
 import { parseDeliverableLinks } from './deliverables';
 import { extractClientMonthlyGoals, packClientMonthlyGoals } from './clientGoals';
 import { extractClientInspirations } from './clientInspirations';
+import { extractClientFollowerHistory } from './clientFollowers';
 import {
   AssignmentStatus,
   ClientAssignmentData,
@@ -161,29 +162,7 @@ function mapMetrics(row: any): PostMetricsData {
 }
 
 export function mapClientRow(row: any, opts?: { contract?: ClientContractData | null; health?: ClientHealthData | null }): ClientData {
-  return {
-    id: row.id,
-    name: row.name,
-    location: row.location,
-    industry: row.industry,
-    website: row.website,
-    contactName: row.contact_name,
-    contactEmail: row.contact_email,
-    contactPhone: row.contact_phone,
-    startDate: row.start_date,
-    endDate: row.end_date,
-    leadSource: row.lead_source,
-    churnReason: row.churn_reason,
-    tags: row.tags || [],
-    assetsUrl: row.assets_url,
-    logoUrl: row.logo_url,
-    status: row.status as ClientStatus,
-    services: row.services || [],
-    notes: row.notes,
-    createdAt: row.created_at,
-    monthlyGoals: extractClientMonthlyGoals(row.tags || []),
-    inspirations: extractClientInspirations(row.tags || []),
-    socialAccounts: (row.client_social_accounts || []).map((s: any) => {
+  const socialAccounts = (row.client_social_accounts || []).map((s: any) => {
       const base = mapSocial(s);
       const tagPrefix = `baseline:${s.platform}:`;
       const foundTag = (row.tags || []).find((t: string) => typeof t === 'string' && t.startsWith(tagPrefix));
@@ -192,12 +171,40 @@ export function mapClientRow(row: any, opts?: { contract?: ClientContractData | 
         if (!isNaN(parsed)) base.initialFollowers = parsed;
       }
       return base;
-    }),
-    assignments: (row.client_assignments || []).map(mapAssignmentRow),
-    contract: opts?.contract ?? null,
-    health: opts?.health ?? null,
-  };
-}
+    });
+
+    const initialIg = socialAccounts.find((s: any) => s.platform === 'instagram')?.initialFollowers;
+    const initialTt = socialAccounts.find((s: any) => s.platform === 'tiktok')?.initialFollowers;
+
+    return {
+      id: row.id,
+      name: row.name,
+      location: row.location,
+      industry: row.industry,
+      website: row.website,
+      contactName: row.contact_name,
+      contactEmail: row.contact_email,
+      contactPhone: row.contact_phone,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      leadSource: row.lead_source,
+      churnReason: row.churn_reason,
+      tags: row.tags || [],
+      assetsUrl: row.assets_url,
+      logoUrl: row.logo_url,
+      status: row.status as ClientStatus,
+      services: row.services || [],
+      notes: row.notes,
+      createdAt: row.created_at,
+      monthlyGoals: extractClientMonthlyGoals(row.tags || []),
+      inspirations: extractClientInspirations(row.tags || []),
+      followerHistory: extractClientFollowerHistory(row.tags || [], initialIg, initialTt, row.start_date),
+      socialAccounts,
+      assignments: (row.client_assignments || []).map(mapAssignmentRow),
+      contract: opts?.contract ?? null,
+      health: opts?.health ?? null,
+    };
+  }
 
 export function mapCreatorRow(row: any, isAdmin = false): CreatorData {
   return {
@@ -813,6 +820,7 @@ export async function createClient(
     startDate?: string | null;
     leadSource?: string | null;
     tags?: string[];
+    logoUrl?: string | null;
   },
   assignedUserIds: string[],
   contract?: { monthlyFee?: number | null; contractType?: string; billingDay?: number | null } | null,
@@ -836,6 +844,7 @@ export async function createClient(
       start_date: toDateOnly(payload.startDate || '') || null,
       lead_source: payload.leadSource?.trim() || null,
       tags: payload.tags || [],
+      logo_url: payload.logoUrl?.trim() || null,
     })
     .select('id')
     .single();
@@ -889,6 +898,7 @@ export async function updateClient(
     churnReason?: string | null;
     tags?: string[];
     assetsUrl?: string | null;
+    logoUrl?: string | null;
   },
   assignedUserIds?: string[]
 ): Promise<ClientData | null> {
@@ -911,6 +921,7 @@ export async function updateClient(
   if (fields.churnReason !== undefined) dataToUpdate.churn_reason = fields.churnReason?.trim() || null;
   if (fields.tags !== undefined) dataToUpdate.tags = fields.tags;
   if (fields.assetsUrl !== undefined) dataToUpdate.assets_url = fields.assetsUrl?.trim() || null;
+  if (fields.logoUrl !== undefined) dataToUpdate.logo_url = fields.logoUrl?.trim() || null;
 
   if (Object.keys(dataToUpdate).length > 0) {
     const { error } = await supabase.from('clients').update(dataToUpdate).eq('id', clientId);

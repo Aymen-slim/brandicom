@@ -65,6 +65,21 @@ export interface SocialAccountData {
   followersUpdatedAt: string | null;
 }
 
+export interface MonthFollowerSnapshot {
+  month: string;
+  instagram: number | null;
+  tiktok: number | null;
+  total: number;
+  gainFromPrevMonth: number | null;
+  gainPct: number | null;
+  igGain: number | null;
+  ttGain: number | null;
+  prevMonth: string | null;
+  prevTotal: number | null;
+  updatedAt: string;
+  source?: 'sync' | 'manual' | 'baseline';
+}
+
 export interface PostMetricsData {
   id: string;
   deliverableId: string;
@@ -218,6 +233,7 @@ export interface ClientData {
   createdAt: string;
   monthlyGoals?: ClientMonthlyGoals;
   inspirations?: InspirationIdea[];
+  followerHistory?: MonthFollowerSnapshot[];
   contract?: ClientContractData | null;
   socialAccounts?: SocialAccountData[];
   health?: ClientHealthData | null;

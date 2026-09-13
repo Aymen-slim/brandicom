@@ -13,7 +13,7 @@ import { MetricsEntryModal } from './MetricsEntryModal';
 import dynamic from 'next/dynamic';
 import { formatMoney, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
 import { InstagramIcon, TikTokIcon } from './SocialIcons';
-import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight, AlertTriangle } from 'lucide-react';
+import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight, AlertTriangle, Calendar, X } from 'lucide-react';
 
 const Markdown = dynamic(() => import('react-markdown'), { ssr: false });
 
@@ -79,6 +79,62 @@ export function ClientWorkspace({
   const [ttBaselineInput, setTtBaselineInput] = useState(
     existingTt?.initialFollowers != null ? String(existingTt.initialFollowers) : ''
   );
+
+  // Manual Month Follower Snapshot Modal State
+  const [showAddSnapshotModal, setShowAddSnapshotModal] = useState(false);
+  const [snapshotMonthInput, setSnapshotMonthInput] = useState(new Date().toISOString().slice(0, 7));
+  const [snapshotIgInput, setSnapshotIgInput] = useState('');
+  const [snapshotTtInput, setSnapshotTtInput] = useState('');
+  const [savingSnapshot, setSavingSnapshot] = useState(false);
+
+  const handleSaveManualSnapshot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!snapshotMonthInput) return;
+    setSavingSnapshot(true);
+    try {
+      const parsedIg = parseFollowerInput(snapshotIgInput);
+      const parsedTt = parseFollowerInput(snapshotTtInput);
+      const res = await fetch(`/api/clients/${currentClient.id}/follower-snapshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month: snapshotMonthInput,
+          instagram: parsedIg,
+          tiktok: parsedTt,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save snapshot');
+      if (data.client) {
+        setCurrentClient((prev) => ({ ...prev, ...data.client }));
+      }
+      setShowAddSnapshotModal(false);
+      setSocialSyncMessage(`Follower snapshot for ${snapshotMonthInput} saved!`);
+    } catch (err: any) {
+      alert(`Error saving snapshot: ${err.message}`);
+    } finally {
+      setSavingSnapshot(false);
+    }
+  };
+
+  const handleDeleteSnapshot = async (month: string) => {
+    if (!confirm(`Delete follower snapshot for ${month}?`)) return;
+    try {
+      const res = await fetch(`/api/clients/${currentClient.id}/follower-snapshot`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete snapshot');
+      if (data.client) {
+        setCurrentClient((prev) => ({ ...prev, ...data.client }));
+      }
+      setSocialSyncMessage(`Follower snapshot for ${month} deleted.`);
+    } catch (err: any) {
+      alert(`Error deleting snapshot: ${err.message}`);
+    }
+  };
 
   const handleSyncProfileFollowers = async (platform: 'instagram' | 'tiktok') => {
     const account = (currentClient.socialAccounts || []).find((s) => s.platform === platform);
@@ -369,6 +425,8 @@ export function ClientWorkspace({
         availableUsers={availableUsers}
         user={user}
         onClientUpdated={(updated) => setCurrentClient(updated)}
+        deliverables={deliverables}
+        onDeliverablesUpdated={(updated) => setDeliverables(updated)}
       />
 
       {/* Monthly Content Goals Progress Bar & End-of-Month Alert */}
@@ -923,6 +981,163 @@ export function ClientWorkspace({
                 )}
               </div>
             </div>
+
+            {/* Month-by-Month Follower Growth & History Table */}
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                <div>
+                  <h4 style={{ fontSize: 13.5, fontWeight: 700, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Calendar size={15} color="#4f46e5" />
+                    <span>Month-by-Month Follower Growth</span>
+                  </h4>
+                  <p style={{ fontSize: 11.5, color: '#64748b', margin: '2px 0 0' }}>
+                    Follower gain tracked each month compared to the month before it
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSnapshotMonthInput(new Date().toISOString().slice(0, 7));
+                      setSnapshotIgInput('');
+                      setSnapshotTtInput('');
+                      setShowAddSnapshotModal(true);
+                    }}
+                    className="btn btn-secondary btn-sm"
+                    style={{ fontSize: 11.5, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                  >
+                    <Plus size={12} />
+                    <span>Record Past Month</span>
+                  </button>
+                </div>
+              </div>
+
+              {currentClient.followerHistory && currentClient.followerHistory.length > 0 ? (
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569', fontWeight: 700, fontSize: 11 }}>
+                        <th style={{ padding: '8px 12px' }}>Month</th>
+                        <th style={{ padding: '8px 12px' }}>Instagram</th>
+                        <th style={{ padding: '8px 12px' }}>TikTok</th>
+                        <th style={{ padding: '8px 12px' }}>Total Followers</th>
+                        <th style={{ padding: '8px 12px' }}>Monthly Gain (vs Prev Month)</th>
+                        <th style={{ padding: '8px 12px' }}>Compared To</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right' }}>Updated</th>
+                        {isAdmin && <th style={{ padding: '8px 12px', textAlign: 'center', width: 40 }}>Action</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...currentClient.followerHistory].reverse().map((rec, idx) => {
+                        const gain = rec.gainFromPrevMonth;
+                        const pct = rec.gainPct;
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx === 0 ? '#fafafa' : '#ffffff' }}>
+                            <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0f172a' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span>{rec.month}</span>
+                                {idx === 0 && (
+                                  <span style={{ fontSize: 9.5, fontWeight: 700, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '1px 6px', borderRadius: 4 }}>
+                                    Latest
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 12px', color: '#9d174d', fontWeight: 600 }}>
+                              {rec.instagram != null ? formatNumber(rec.instagram) : '—'}
+                              {rec.igGain != null && (
+                                <span style={{ marginLeft: 5, fontSize: 10.5, color: rec.igGain >= 0 ? '#059669' : '#dc2626' }}>
+                                  ({rec.igGain >= 0 ? `+${formatNumber(rec.igGain)}` : formatNumber(rec.igGain)})
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 12px', color: '#111827', fontWeight: 600 }}>
+                              {rec.tiktok != null ? formatNumber(rec.tiktok) : '—'}
+                              {rec.ttGain != null && (
+                                <span style={{ marginLeft: 5, fontSize: 10.5, color: rec.ttGain >= 0 ? '#059669' : '#dc2626' }}>
+                                  ({rec.ttGain >= 0 ? `+${formatNumber(rec.ttGain)}` : formatNumber(rec.ttGain)})
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontWeight: 800, color: '#0f172a' }}>
+                              {formatNumber(rec.total)}
+                            </td>
+                            <td style={{ padding: '10px 12px' }}>
+                              {gain != null ? (
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    fontSize: 11.5,
+                                    fontWeight: 700,
+                                    color: gain >= 0 ? '#059669' : '#dc2626',
+                                    backgroundColor: gain >= 0 ? '#ecfdf5' : '#fef2f2',
+                                    padding: '2px 8px',
+                                    borderRadius: 6,
+                                    border: `1px solid ${gain >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                                  }}
+                                >
+                                  {gain >= 0 ? `+${formatNumber(gain)}` : formatNumber(gain)}
+                                  {pct != null && (
+                                    <span style={{ fontSize: 10.5, opacity: 0.9 }}>
+                                      ({gain >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: 11, color: '#94a3b8' }}>Starting Base</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 12px', fontSize: 11, color: '#64748b' }}>
+                              {rec.prevMonth ? (
+                                <span>{rec.prevMonth} ({rec.prevTotal != null ? formatNumber(rec.prevTotal) : '—'})</span>
+                              ) : (
+                                <span>Baseline snapshot</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 12px', textAlign: 'right', fontSize: 10.5, color: '#94a3b8' }}>
+                              {new Date(rec.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </td>
+                            {isAdmin && (
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSnapshot(rec.month)}
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ padding: 3, color: '#94a3b8' }}
+                                  title="Delete month snapshot"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px dashed #cbd5e1',
+                    borderRadius: 8,
+                    padding: '16px 20px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p style={{ fontSize: 12, color: '#475569', margin: 0, fontWeight: 600 }}>
+                    No monthly snapshots recorded yet.
+                  </p>
+                  <p style={{ fontSize: 11.5, color: '#94a3b8', margin: '4px 0 0' }}>
+                    Click <strong>"Update Month & Followers"</strong> in the top header to run live sync and save your first monthly follower gain, or click <strong>"Record Past Month"</strong> to enter past counts.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1468,6 +1683,100 @@ export function ClientWorkspace({
           onClose={() => setMetricsFor(null)}
           onSaved={() => refreshDeliverables()}
         />
+      )}
+
+      {/* Manual Record Follower Snapshot Modal */}
+      {showAddSnapshotModal && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: 420, padding: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Calendar size={18} color="#4f46e5" />
+                <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: '#111827' }}>
+                  Record Monthly Follower Snapshot
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddSnapshotModal(false)}
+                className="btn btn-ghost btn-sm"
+                style={{ padding: 4 }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveManualSnapshot} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', display: 'block', marginBottom: 4 }}>
+                  Target Month (YYYY-MM)
+                </label>
+                <input
+                  type="month"
+                  className="input-field"
+                  value={snapshotMonthInput}
+                  onChange={(e) => setSnapshotMonthInput(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <InstagramIcon size={13} color="#be185d" />
+                  <span>Instagram Followers</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 15.4k, 15400"
+                  className="input-field"
+                  value={snapshotIgInput}
+                  onChange={(e) => setSnapshotIgInput(e.target.value)}
+                />
+                {snapshotIgInput && parseFollowerInput(snapshotIgInput) != null && (
+                  <span style={{ fontSize: 11, color: '#047857', fontWeight: 600, marginTop: 2, display: 'block' }}>
+                    = {formatNumber(parseFollowerInput(snapshotIgInput)!)} followers
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <TikTokIcon size={13} color="#0f172a" />
+                  <span>TikTok Followers</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 8.2k, 8200"
+                  className="input-field"
+                  value={snapshotTtInput}
+                  onChange={(e) => setSnapshotTtInput(e.target.value)}
+                />
+                {snapshotTtInput && parseFollowerInput(snapshotTtInput) != null && (
+                  <span style={{ fontSize: 11, color: '#047857', fontWeight: 600, marginTop: 2, display: 'block' }}>
+                    = {formatNumber(parseFollowerInput(snapshotTtInput)!)} followers
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddSnapshotModal(false)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSnapshot}
+                  className="btn btn-primary btn-sm"
+                >
+                  {savingSnapshot ? 'Saving...' : 'Save Month Snapshot'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

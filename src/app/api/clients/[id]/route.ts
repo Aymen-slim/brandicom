@@ -70,6 +70,7 @@ export async function PATCH(
       churnReason,
       tags,
       assetsUrl,
+      logoUrl,
       socialAccounts,
       contract,
     } = body;
@@ -102,6 +103,7 @@ export async function PATCH(
         churnReason,
         tags: Array.isArray(tags) ? tags : undefined,
         assetsUrl,
+        logoUrl,
       },
       Array.isArray(assignedUserIds) ? assignedUserIds : undefined
     );

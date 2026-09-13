@@ -133,3 +133,31 @@ export function parseFollowerInput(val: string | number | null | undefined): num
   return isNaN(n) || n < 0 ? null : n;
 }
 
+/**
+ * Resolves an image URL so it safely bypasses Instagram / TikTok CDN CORS and CORP restrictions.
+ */
+export function getProxiedImageUrl(url?: string | null): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+  // Data URLs, local paths, or blob URLs do not need proxying
+  if (trimmed.startsWith('data:') || trimmed.startsWith('/') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+
+  // Check if it's from Instagram/Meta or TikTok CDN which enforce same-origin or hotlink blocks
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes('cdninstagram.com') ||
+    lower.includes('fbcdn.net') ||
+    lower.includes('instagram.com') ||
+    lower.includes('tiktokcdn') ||
+    lower.includes('tiktok.com')
+  ) {
+    return `/api/proxy-image?url=${encodeURIComponent(trimmed)}`;
+  }
+
+  return trimmed;
+}
+
+

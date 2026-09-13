@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       tags,
       monthlyFee,
       contractType,
+      logoUrl,
     } = body;
 
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest) {
         startDate,
         leadSource,
         tags: initialTags.length > 0 ? initialTags : undefined,
+        logoUrl,
       },
       userIdsToAssign,
       isAdmin(user) ? { monthlyFee: monthlyFee ? Number(monthlyFee) : null, contractType } : null,

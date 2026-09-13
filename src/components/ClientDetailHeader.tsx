@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClientData, ClientStatus, UserSummary } from '@/types';
+import { ClientData, ClientStatus, DeliverableData, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
-import { formatMoney, formatTenure, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
+import { formatMoney, formatTenure, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput, getProxiedImageUrl } from '@/lib/format';
 import { InstagramIcon, TikTokIcon } from './SocialIcons';
 import {
   MapPin,
@@ -17,6 +17,14 @@ import {
   ExternalLink,
   RefreshCw,
   Sparkles,
+  Camera,
+  Upload,
+  AlertTriangle,
+  Image as ImageIcon,
+  Check,
+  Clock,
+  CheckCircle2,
+  ArrowRight,
 } from 'lucide-react';
 
 interface ClientDetailHeaderProps {
@@ -24,6 +32,8 @@ interface ClientDetailHeaderProps {
   availableUsers: UserSummary[];
   user?: UserSummary | null;
   onClientUpdated?: (updated: ClientData) => void;
+  deliverables?: DeliverableData[];
+  onDeliverablesUpdated?: (updated: DeliverableData[]) => void;
 }
 
 export function ClientDetailHeader({
@@ -31,6 +41,8 @@ export function ClientDetailHeader({
   availableUsers,
   user,
   onClientUpdated,
+  deliverables = [],
+  onDeliverablesUpdated,
 }: ClientDetailHeaderProps) {
   const router = useRouter();
   const isAdmin = user?.role === 'admin';
@@ -38,6 +50,194 @@ export function ClientDetailHeader({
   const [client, setClient] = useState<ClientData>(initialClient);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // Profile picture / logo state
+  const [logoUrl, setLogoUrl] = useState(client.logoUrl || '');
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const [avatarInputUrl, setAvatarInputUrl] = useState(client.logoUrl || '');
+  const [fetchingAvatarPlatform, setFetchingAvatarPlatform] = useState<'instagram' | 'tiktok' | null>(null);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  useEffect(() => {
+    setLogoLoadError(false);
+  }, [client.logoUrl]);
+
+  // Monthly sync state & countdown timer
+  const [syncingMonth, setSyncingMonth] = useState(false);
+  const [syncMonthPeriod, setSyncMonthPeriod] = useState(new Date().toISOString().slice(0, 7));
+  const [syncSummaryModal, setSyncSummaryModal] = useState<any | null>(null);
+  const [syncElapsedTime, setSyncElapsedTime] = useState(0);
+  const [syncCountdown, setSyncCountdown] = useState(16);
+  const [syncStage, setSyncStage] = useState(1);
+  const [syncIsSuccessTransition, setSyncIsSuccessTransition] = useState(false);
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+    };
+  }, []);
+
+  // Avatar file upload handler (resizes in canvas to WebP/JPEG data URL, ~30KB)
+  const handleAvatarFileUpload = (file: File) => {
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Image file size must be less than 8MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 320;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > maxDim) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          }
+        } else {
+          if (h > maxDim) {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        setLogoUrl(dataUrl);
+        setAvatarInputUrl(dataUrl);
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Fetch social avatar
+  const handleFetchSocialAvatar = async (platform: 'instagram' | 'tiktok') => {
+    const account = (client.socialAccounts || []).find((s) => s.platform === platform);
+    const raw = account?.handle || account?.url;
+    const clean = cleanSocialHandle(raw);
+    if (!clean) {
+      alert(`No ${platform === 'instagram' ? 'Instagram' : 'TikTok'} handle configured for this client.`);
+      return;
+    }
+    setFetchingAvatarPlatform(platform);
+    try {
+      const res = await fetch('/api/social/fetch-followers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ urlOrHandle: clean, platform }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch social profile');
+      if (data.profilePicUrl) {
+        setAvatarInputUrl(data.profilePicUrl);
+        setLogoUrl(data.profilePicUrl);
+      } else {
+        alert('No profile picture found on this social profile.');
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setFetchingAvatarPlatform(null);
+    }
+  };
+
+  // Save avatar directly (Admin quick action)
+  const handleSaveAvatarDirectly = async (newUrl: string | null) => {
+    setSavingAvatar(true);
+    try {
+      const res = await fetch(`/api/clients/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logoUrl: newUrl || null }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setClient((prev) => ({ ...prev, logoUrl: newUrl || null }));
+        setLogoUrl(newUrl || '');
+        setShowAvatarModal(false);
+        if (onClientUpdated) onClientUpdated(updated);
+        router.refresh();
+      } else {
+        alert('Failed to update client profile picture');
+      }
+    } catch (err: any) {
+      alert(`Error updating profile picture: ${err.message}`);
+    } finally {
+      setSavingAvatar(false);
+    }
+  };
+
+  // Sync Month Data & Followers (Button to update all data for that client in that month)
+  const handleSyncMonthData = async (monthOverride?: string) => {
+    const targetMonth = monthOverride || syncMonthPeriod;
+    setSyncingMonth(true);
+    setSyncElapsedTime(0);
+    setSyncCountdown(16);
+    setSyncStage(1);
+    setSyncIsSuccessTransition(false);
+
+    if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+    const startTime = Date.now();
+    syncTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setSyncElapsedTime(elapsed);
+      setSyncCountdown(Math.max(1, 16 - elapsed));
+
+      if (elapsed < 3) {
+        setSyncStage(1);
+      } else if (elapsed < 7) {
+        setSyncStage(2);
+      } else if (elapsed < 12) {
+        setSyncStage(3);
+      } else {
+        setSyncStage(4);
+      }
+    }, 1000);
+
+    try {
+      const res = await fetch(`/api/clients/${client.id}/sync-month`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month: targetMonth }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to sync monthly data');
+
+      // Success! Move to stage 5 and trigger celebratory transition
+      setSyncStage(5);
+      setSyncIsSuccessTransition(true);
+      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+
+      if (data.client) {
+        setClient((prev) => ({ ...prev, ...data.client }));
+        if (data.client.logoUrl) setLogoUrl(data.client.logoUrl);
+        if (onClientUpdated) onClientUpdated(data.client);
+      }
+      if (data.deliverables && onDeliverablesUpdated) {
+        onDeliverablesUpdated(data.deliverables);
+      }
+
+      // Smooth brief transition before displaying results
+      setTimeout(() => {
+        setSyncingMonth(false);
+        setSyncIsSuccessTransition(false);
+        setSyncSummaryModal(data.summary);
+        router.refresh();
+      }, 700);
+    } catch (err: any) {
+      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
+      setSyncingMonth(false);
+      alert(`Monthly data sync failed: ${err.message}`);
+    }
+  };
 
   // Existing socials from client
   const existingIg = (client.socialAccounts || []).find((s) => s.platform === 'instagram');
@@ -161,6 +361,7 @@ export function ClientDetailHeader({
           name: name.trim(),
           location: location.trim() || null,
           status,
+          logoUrl: logoUrl.trim() || null,
           services: services.split(',').map((s) => s.trim()).filter(Boolean),
           notes: notes.trim() || null,
           assignedUserIds,
@@ -257,12 +458,81 @@ export function ClientDetailHeader({
       }}
     >
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-        {/* Left Info: Name, location, status, services */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>
-              {client.name}
-            </h1>
+        {/* Left Info: Avatar + Name, location, status, services */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flex: '1 1 500px', minWidth: '280px' }}>
+          {/* Avatar with Admin Edit Badge */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            {client.logoUrl && !logoLoadError ? (
+              <img
+                src={getProxiedImageUrl(client.logoUrl)}
+                alt={client.name}
+                referrerPolicy="no-referrer"
+                onError={() => setLogoLoadError(true)}
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
+                  objectFit: 'cover',
+                  border: '2px solid #e2e8f0',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+                  backgroundColor: '#f8fafc',
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
+                  background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 18,
+                  fontWeight: 800,
+                  boxShadow: '0 2px 8px rgba(79, 70, 229, 0.25)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {client.name.slice(0, 2).toUpperCase()}
+              </div>
+            )}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAvatarInputUrl(client.logoUrl || '');
+                  setShowAvatarModal(true);
+                }}
+                title="Change client profile picture (Admin)"
+                style={{
+                  position: 'absolute',
+                  bottom: -4,
+                  right: -4,
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  backgroundColor: '#1e293b',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: '2px solid #ffffff',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 4px rgba(0, 0, 0, 0.25)',
+                }}
+              >
+                <Camera size={11} />
+              </button>
+            )}
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: 800, color: '#111827', letterSpacing: '-0.02em' }}>
+                {client.name}
+              </h1>
             <select
               value={client.status}
               onChange={(e) => handleHeaderStageChange(e.target.value as ClientStatus)}
@@ -474,6 +744,7 @@ export function ClientDetailHeader({
             ))}
           </div>
         </div>
+      </div>
 
         {/* Right Info: Retainer & Action Buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '10px', minWidth: '120px' }}>
@@ -536,6 +807,59 @@ export function ClientDetailHeader({
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Month selector & Update Month & Followers Button */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                border: '1px solid #a7f3d0',
+                borderRadius: 6,
+                backgroundColor: '#ecfdf5',
+                overflow: 'hidden',
+                boxShadow: '0 1px 2px rgba(5, 150, 105, 0.08)',
+              }}
+            >
+              <input
+                type="month"
+                value={syncMonthPeriod}
+                onChange={(e) => setSyncMonthPeriod(e.target.value)}
+                style={{
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  padding: '4px 6px',
+                  border: 'none',
+                  borderRight: '1px solid #a7f3d0',
+                  backgroundColor: '#f0fdf4',
+                  color: '#065f46',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+                title="Select month to update"
+              />
+              <button
+                type="button"
+                onClick={() => handleSyncMonthData()}
+                disabled={syncingMonth}
+                className="btn btn-sm"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  backgroundColor: '#ecfdf5',
+                  border: 'none',
+                  color: '#065f46',
+                  fontWeight: 700,
+                  padding: '5px 11px',
+                  borderRadius: 0,
+                  cursor: 'pointer',
+                }}
+                title={`Sync live followers and all ${syncMonthPeriod} post metrics`}
+              >
+                <RefreshCw size={12} className={syncingMonth ? 'animate-spin' : ''} />
+                <span>{syncingMonth ? 'Updating Data...' : 'Update Month & Followers'}</span>
+              </button>
+            </div>
+
             <button
               onClick={() => setShowEditModal(true)}
               className="btn btn-secondary btn-sm"
@@ -581,6 +905,95 @@ export function ClientDetailHeader({
             </div>
 
             <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Profile Picture / Logo Section */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 16,
+                  padding: '12px 14px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  {logoUrl ? (
+                    <img
+                      src={getProxiedImageUrl(logoUrl)}
+                      alt="Logo preview"
+                      referrerPolicy="no-referrer"
+                      style={{
+                        width: 54,
+                        height: 54,
+                        borderRadius: 12,
+                        objectFit: 'cover',
+                        border: '2px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 54,
+                        height: 54,
+                        borderRadius: 12,
+                        background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 18,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {name ? name.slice(0, 2).toUpperCase() : 'CL'}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, color: '#4b5563', display: 'block', marginBottom: 4, fontWeight: 700 }}>
+                    Client Profile Picture / Logo
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label
+                      className="btn btn-secondary btn-sm"
+                      style={{ cursor: 'pointer', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <Upload size={12} /> Upload Photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAvatarFileUpload(file);
+                        }}
+                      />
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Or paste image URL"
+                      value={logoUrl}
+                      onChange={(e) => setLogoUrl(e.target.value)}
+                      className="input-field"
+                      style={{ flex: '1 1 200px', fontSize: 12, padding: '4px 8px' }}
+                    />
+                    {logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setLogoUrl('')}
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#dc2626', fontSize: 11, padding: '4px 8px' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid-responsive-2" style={{ gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
@@ -777,7 +1190,7 @@ export function ClientDetailHeader({
                       />
                       <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
                         {parseFollowerInput(igInitialFollowers) != null
-                          ? `= ${formatNumber(parseFollowerInput(igInitialFollowers))} followers`
+                          ? `= ${formatNumber(parseFollowerInput(igInitialFollowers))}`
                           : 'Enter starting baseline'}
                       </div>
                     </div>
@@ -801,7 +1214,7 @@ export function ClientDetailHeader({
                       />
                       <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
                         {parseFollowerInput(igFollowers) != null
-                          ? `= ${formatNumber(parseFollowerInput(igFollowers))} followers`
+                          ? `= ${formatNumber(parseFollowerInput(igFollowers))}`
                           : 'Enter current count or auto-fetch'}
                       </div>
                     </div>
@@ -916,7 +1329,7 @@ export function ClientDetailHeader({
                       />
                       <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
                         {parseFollowerInput(ttInitialFollowers) != null
-                          ? `= ${formatNumber(parseFollowerInput(ttInitialFollowers))} followers`
+                          ? `= ${formatNumber(parseFollowerInput(ttInitialFollowers))}`
                           : 'Enter starting baseline'}
                       </div>
                     </div>
@@ -940,7 +1353,7 @@ export function ClientDetailHeader({
                       />
                       <div style={{ marginTop: 4, fontSize: '10.5px', color: '#64748b' }}>
                         {parseFollowerInput(ttFollowers) != null
-                          ? `= ${formatNumber(parseFollowerInput(ttFollowers))} followers`
+                          ? `= ${formatNumber(parseFollowerInput(ttFollowers))}`
                           : 'Enter current count or auto-fetch'}
                       </div>
                     </div>
@@ -1187,6 +1600,509 @@ export function ClientDetailHeader({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Change Avatar / Profile Picture Modal (Admin Quick Action) */}
+      {showAvatarModal && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: 440, padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Camera size={18} color="#4f46e5" />
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#111827' }}>
+                  Client Profile Picture
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAvatarModal(false)}
+                className="btn btn-ghost btn-sm"
+                style={{ padding: 4 }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ position: 'relative', marginBottom: 10 }}>
+                {avatarInputUrl ? (
+                  <img
+                    src={getProxiedImageUrl(avatarInputUrl)}
+                    alt="Preview"
+                    referrerPolicy="no-referrer"
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 18,
+                      objectFit: 'cover',
+                      border: '3px solid #e2e8f0',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                      backgroundColor: '#f8fafc',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 90,
+                      height: 90,
+                      borderRadius: 18,
+                      background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 28,
+                      fontWeight: 800,
+                      boxShadow: '0 4px 12px rgba(79, 70, 229, 0.25)',
+                    }}
+                  >
+                    {client.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
+                {client.name}
+              </span>
+              <span style={{ fontSize: 11, color: '#64748b' }}>
+                Admin Client Photo Manager
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 6 }}>
+                  Upload image file
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleAvatarFileUpload(file);
+                  }}
+                  className="input-field"
+                  style={{ fontSize: 12, padding: '6px 8px' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 6 }}>
+                  Or enter image URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://example.com/logo.png"
+                  value={avatarInputUrl}
+                  onChange={(e) => setAvatarInputUrl(e.target.value)}
+                  className="input-field"
+                  style={{ fontSize: 12.5 }}
+                />
+              </div>
+
+              {/* Quick social imports */}
+              {(existingIg?.handle || existingTt?.handle) && (
+                <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 8 }}>
+                    Quick import from linked social media
+                  </span>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {existingIg?.handle && (
+                      <button
+                        type="button"
+                        onClick={() => handleFetchSocialAvatar('instagram')}
+                        disabled={fetchingAvatarPlatform === 'instagram'}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      >
+                        <InstagramIcon size={12} color="#be185d" />
+                        <span>{fetchingAvatarPlatform === 'instagram' ? 'Fetching...' : 'Use Instagram Photo'}</span>
+                      </button>
+                    )}
+                    {existingTt?.handle && (
+                      <button
+                        type="button"
+                        onClick={() => handleFetchSocialAvatar('tiktok')}
+                        disabled={fetchingAvatarPlatform === 'tiktok'}
+                        className="btn btn-secondary btn-sm"
+                        style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      >
+                        <TikTokIcon size={12} color="#0f172a" />
+                        <span>{fetchingAvatarPlatform === 'tiktok' ? 'Fetching...' : 'Use TikTok Photo'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 22 }}>
+              {client.logoUrl ? (
+                <button
+                  type="button"
+                  onClick={() => handleSaveAvatarDirectly(null)}
+                  disabled={savingAvatar}
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: '#dc2626', fontSize: 11.5 }}
+                >
+                  Remove picture
+                </button>
+              ) : <div />}
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAvatarModal(false)}
+                  className="btn btn-secondary btn-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveAvatarDirectly(avatarInputUrl)}
+                  disabled={savingAvatar}
+                  className="btn btn-primary btn-sm"
+                >
+                  {savingAvatar ? 'Saving...' : 'Save Picture'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live Countdown & Progress Overlay Modal */}
+      {syncingMonth && (
+        <div className="modal-overlay" style={{ zIndex: 10000 }}>
+          <div
+            className="modal-container"
+            style={{
+              maxWidth: 480,
+              padding: '28px 26px',
+              borderRadius: '16px',
+              background: '#ffffff',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)',
+              border: '1px solid #e2e8f0',
+              textAlign: 'center',
+            }}
+          >
+            {/* Header Icon + Titles */}
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #4f46e5, #059669)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                boxShadow: '0 8px 20px rgba(16, 185, 129, 0.25)',
+              }}
+            >
+              <RefreshCw size={26} className="animate-spin" />
+            </div>
+
+            <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>
+              Updating Month & Followers
+            </h3>
+            <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 20px' }}>
+              Syncing live metrics for <strong style={{ color: '#0f172a' }}>{syncMonthPeriod}</strong> and calculating follower gain
+            </p>
+
+            {/* Countdown / Elapsed Timer Box */}
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+                border: '1px solid #e2e8f0',
+                borderRadius: 12,
+                padding: '16px 20px',
+                marginBottom: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-around',
+              }}
+            >
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                  Estimated Countdown
+                </span>
+                <span
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 900,
+                    color: syncIsSuccessTransition ? '#059669' : '#4f46e5',
+                    fontVariantNumeric: 'tabular-nums',
+                    display: 'block',
+                    marginTop: 2,
+                  }}
+                >
+                  {syncIsSuccessTransition ? 'Done!' : `${syncCountdown}s`}
+                </span>
+                <span style={{ fontSize: 10.5, color: '#94a3b8' }}>
+                  {syncIsSuccessTransition ? 'Complete' : 'Remaining'}
+                </span>
+              </div>
+
+              <div style={{ width: 1, height: 40, backgroundColor: '#cbd5e1' }} />
+
+              <div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block' }}>
+                  Time Elapsed
+                </span>
+                <span
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 900,
+                    color: '#0f172a',
+                    fontVariantNumeric: 'tabular-nums',
+                    display: 'block',
+                    marginTop: 2,
+                  }}
+                >
+                  {String(Math.floor(syncElapsedTime / 60)).padStart(2, '0')}:{String(syncElapsedTime % 60).padStart(2, '0')}
+                </span>
+                <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Stopwatch</span>
+              </div>
+            </div>
+
+            {/* Visual Progress Bar */}
+            <div style={{ marginBottom: 20 }}>
+              <div
+                style={{
+                  height: 8,
+                  borderRadius: 999,
+                  backgroundColor: '#e2e8f0',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${syncIsSuccessTransition ? 100 : syncStage === 1 ? 25 : syncStage === 2 ? 50 : syncStage === 3 ? 75 : 90}%`,
+                    background: 'linear-gradient(90deg, #4f46e5, #06b6d4, #10b981)',
+                    borderRadius: 999,
+                    transition: 'width 0.6s ease-in-out',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Checklist of Real-time Stages */}
+            <div style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+              {[
+                { stage: 1, label: 'Connecting to social scraper APIs' },
+                { stage: 2, label: 'Scraping Instagram & TikTok follower counts' },
+                { stage: 3, label: `Syncing deliverable views, likes & comments for ${syncMonthPeriod}` },
+                { stage: 4, label: 'Calculating month-over-month follower gain vs previous month' },
+                { stage: 5, label: 'Saving snapshot & finalizing results' },
+              ].map((s) => {
+                const isPast = syncStage > s.stage || syncIsSuccessTransition;
+                const isCurrent = syncStage === s.stage && !syncIsSuccessTransition;
+                return (
+                  <div
+                    key={s.stage}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      fontSize: 12.5,
+                      color: isPast ? '#059669' : isCurrent ? '#0f172a' : '#94a3b8',
+                      fontWeight: isCurrent ? 700 : isPast ? 600 : 400,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: isPast ? '#ecfdf5' : isCurrent ? '#eef2ff' : '#f1f5f9',
+                        color: isPast ? '#059669' : isCurrent ? '#4f46e5' : '#94a3b8',
+                        border: `1px solid ${isPast ? '#a7f3d0' : isCurrent ? '#c7d2fe' : '#e2e8f0'}`,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isPast ? <Check size={12} strokeWidth={3} /> : isCurrent ? <RefreshCw size={11} className="animate-spin" /> : s.stage}
+                    </div>
+                    <span>{s.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Month Data Summary Modal */}
+      {syncSummaryModal && (
+        <div className="modal-overlay">
+          <div className="modal-container" style={{ maxWidth: 520, padding: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Sparkles size={18} color="#059669" />
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#111827' }}>
+                  Month & Followers Data Synced!
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSyncSummaryModal(null)}
+                className="btn btn-ghost btn-sm"
+                style={{ padding: 4 }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Month-over-Month Follower Gain Banner */}
+              {syncSummaryModal.followerGain && (
+                <div
+                  style={{
+                    background: syncSummaryModal.followerGain.gain == null ? '#f8fafc' : syncSummaryModal.followerGain.gain >= 0 ? 'linear-gradient(135deg, #ecfdf5, #f0fdf4)' : 'linear-gradient(135deg, #fef2f2, #fff1f2)',
+                    border: `1px solid ${syncSummaryModal.followerGain.gain == null ? '#e2e8f0' : syncSummaryModal.followerGain.gain >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                    borderRadius: 10,
+                    padding: '14px 16px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: syncSummaryModal.followerGain.gain >= 0 ? '#065f46' : '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Follower Gain This Month ({syncSummaryModal.followerGain.month})
+                    </span>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>
+                      vs {syncSummaryModal.followerGain.prevMonth || 'Previous Month'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', margin: '4px 0 8px' }}>
+                    <div
+                      style={{
+                        fontSize: 26,
+                        fontWeight: 900,
+                        color: syncSummaryModal.followerGain.gain == null ? '#0f172a' : syncSummaryModal.followerGain.gain >= 0 ? '#059669' : '#dc2626',
+                      }}
+                    >
+                      {syncSummaryModal.followerGain.gain != null
+                        ? `${syncSummaryModal.followerGain.gain >= 0 ? '+' : ''}${formatNumber(syncSummaryModal.followerGain.gain)}`
+                        : formatNumber(syncSummaryModal.followerGain.total)}
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: syncSummaryModal.followerGain.gain >= 0 ? '#047857' : '#b91c1c' }}>
+                      {syncSummaryModal.followerGain.gainPct != null
+                        ? `(${syncSummaryModal.followerGain.gainPct >= 0 ? '+' : ''}${syncSummaryModal.followerGain.gainPct.toFixed(1)}% gained)`
+                        : 'followers recorded'}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12, fontSize: 11.5, color: '#334155', flexWrap: 'wrap', borderTop: '1px solid rgba(0,0,0,0.06)', paddingTop: 8 }}>
+                    <span>Live Total: <strong>{formatNumber(syncSummaryModal.followerGain.total)}</strong></span>
+                    {syncSummaryModal.followerGain.prevTotal != null && (
+                      <span>Previous Base: <strong>{formatNumber(syncSummaryModal.followerGain.prevTotal)}</strong></span>
+                    )}
+                    {syncSummaryModal.followerGain.igGain != null && (
+                      <span style={{ color: '#be185d' }}>
+                        IG: <strong>{syncSummaryModal.followerGain.igGain >= 0 ? `+${formatNumber(syncSummaryModal.followerGain.igGain)}` : formatNumber(syncSummaryModal.followerGain.igGain)}</strong>
+                      </span>
+                    )}
+                    {syncSummaryModal.followerGain.ttGain != null && (
+                      <span style={{ color: '#0f172a' }}>
+                        TikTok: <strong>{syncSummaryModal.followerGain.ttGain >= 0 ? `+${formatNumber(syncSummaryModal.followerGain.ttGain)}` : formatNumber(syncSummaryModal.followerGain.ttGain)}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Followers summary box */}
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+                  Audience & Follower Counts
+                </div>
+                {syncSummaryModal.socials && syncSummaryModal.socials.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {syncSummaryModal.socials.map((s: any, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                          {s.platform === 'instagram' ? <InstagramIcon size={13} color="#be185d" /> : <TikTokIcon size={13} color="#0f172a" />}
+                          {s.handle || s.platform}
+                        </span>
+                        <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                          {formatNumber(s.after)} followers
+                          {s.diff !== 0 && (
+                            <span style={{ marginLeft: 6, color: s.diff > 0 ? '#059669' : '#dc2626', fontSize: 11 }}>
+                              ({s.diff > 0 ? `+${formatNumber(s.diff)}` : formatNumber(s.diff)})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 11.5, color: '#64748b', margin: 0 }}>
+                    No Instagram or TikTok handle was configured for follower sync.
+                  </p>
+                )}
+              </div>
+
+              {/* Month Posts summary box */}
+              <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Month Posts ({syncMonthPeriod})</span>
+                  <span style={{ color: '#059669' }}>
+                    {syncSummaryModal.totalPostsSynced} / {syncSummaryModal.totalPostsInMonth} posts updated
+                  </span>
+                </div>
+                {syncSummaryModal.posts && syncSummaryModal.posts.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+                    {syncSummaryModal.posts.map((p: any, idx: number) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>
+                        <span style={{ fontWeight: 500, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 240 }}>
+                          {p.title}
+                        </span>
+                        <span style={{ fontWeight: 700, color: '#4338ca' }}>
+                          {formatNumber(p.views)} views · {formatNumber(p.likes)} likes
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 11.5, color: '#64748b', margin: 0 }}>
+                    {syncSummaryModal.totalPostsInMonth === 0
+                      ? `No deliverables found for ${syncMonthPeriod}.`
+                      : `No posts in ${syncMonthPeriod} have live Instagram or TikTok URLs attached yet.`}
+                  </p>
+                )}
+              </div>
+
+              {/* Any errors or warnings */}
+              {syncSummaryModal.errors && syncSummaryModal.errors.length > 0 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fef08a', padding: 10, borderRadius: 6 }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, color: '#b45309', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertTriangle size={13} /> Notice
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11, color: '#78350f' }}>
+                    {syncSummaryModal.errors.map((e: string, i: number) => (
+                      <li key={i}>{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => setSyncSummaryModal(null)}
+                className="btn btn-primary btn-sm"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

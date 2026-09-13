@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
-import { formatMoney, formatTenure, formatNumber } from '@/lib/format';
+import { formatMoney, formatTenure, formatNumber, getProxiedImageUrl } from '@/lib/format';
 import {
   Search,
   Plus,
@@ -17,6 +17,7 @@ import {
   MapPin,
   Clock,
   Sparkles,
+  Upload,
 } from 'lucide-react';
 
 interface ClientTableProps {
@@ -51,6 +52,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
     monthlyStories: '',
     monthlyOther: '',
     monthlyOtherLabel: '',
+    logoUrl: '',
   });
 
   // Filter clients
@@ -123,6 +125,43 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
     }
   };
 
+  const handleAvatarFileUpload = (file: File) => {
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      alert('Image file size must be less than 8MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 320;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > maxDim) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          }
+        } else {
+          if (h > maxDim) {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        setFormData((prev) => ({ ...prev, logoUrl: dataUrl }));
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Create Client
   const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,6 +181,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           services: formData.services.split(',').map((s) => s.trim()).filter(Boolean),
           notes: formData.notes.trim() || null,
           assignedUserIds: formData.assignedUserIds,
+          logoUrl: formData.logoUrl.trim() || null,
           monthlyGoals: {
             selectedFormats: [
               parseInt(formData.monthlyReels, 10) > 0 ? 'reels' : null,
@@ -176,6 +216,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           monthlyStories: '',
           monthlyOther: '',
           monthlyOtherLabel: '',
+          logoUrl: '',
         });
         router.refresh();
       } else {
@@ -324,24 +365,63 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
 
                       {/* Name & Location */}
                       <td>
-                        <div style={{ fontWeight: 600, color: '#111827', fontSize: '13.5px' }}>
-                          {client.name}
-                        </div>
-                        {client.location && (
-                          <div
-                            style={{
-                              fontSize: '11px',
-                              color: '#6b7280',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '3px',
-                              marginTop: '1px',
-                            }}
-                          >
-                            <MapPin size={10} color="#9ca3af" />
-                            <span>{client.location}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          {client.logoUrl ? (
+                            <img
+                              src={getProxiedImageUrl(client.logoUrl)}
+                              alt={client.name}
+                              referrerPolicy="no-referrer"
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 8,
+                                objectFit: 'cover',
+                                border: '1px solid #e2e8f0',
+                                flexShrink: 0,
+                                backgroundColor: '#f8fafc',
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 34,
+                                height: 34,
+                                borderRadius: 8,
+                                background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                                color: '#ffffff',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 12,
+                                fontWeight: 700,
+                                flexShrink: 0,
+                                letterSpacing: '0.02em',
+                              }}
+                            >
+                              {client.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#111827', fontSize: '13.5px' }}>
+                              {client.name}
+                            </div>
+                            {client.location && (
+                              <div
+                                style={{
+                                  fontSize: '11px',
+                                  color: '#6b7280',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '3px',
+                                  marginTop: '1px',
+                                }}
+                              >
+                                <MapPin size={10} color="#9ca3af" />
+                                <span>{client.location}</span>
+                              </div>
+                            )}
                           </div>
-                        )}
+                        </div>
                         {(() => {
                           const socials = client.socialAccounts || [];
                           const cur = socials.reduce((acc, s) => acc + (s.followers || 0), 0);
@@ -583,6 +663,95 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
             </div>
 
             <form onSubmit={handleCreateClient} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Profile Picture / Logo Section */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 14,
+                  padding: '10px 14px',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                }}
+              >
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  {formData.logoUrl ? (
+                    <img
+                      src={getProxiedImageUrl(formData.logoUrl)}
+                      alt="Logo preview"
+                      referrerPolicy="no-referrer"
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 10,
+                        objectFit: 'cover',
+                        border: '2px solid #e2e8f0',
+                        backgroundColor: '#ffffff',
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 10,
+                        background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                        color: '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 16,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {formData.name ? formData.name.slice(0, 2).toUpperCase() : 'CL'}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 11, color: '#4b5563', display: 'block', marginBottom: 4, fontWeight: 700 }}>
+                    Client Profile Picture / Logo (Optional)
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label
+                      className="btn btn-secondary btn-sm"
+                      style={{ cursor: 'pointer', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <Upload size={12} /> Upload Photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAvatarFileUpload(file);
+                        }}
+                      />
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="Or enter image URL"
+                      value={formData.logoUrl}
+                      onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value })}
+                      className="input-field"
+                      style={{ flex: '1 1 180px', fontSize: 12, padding: '4px 8px' }}
+                    />
+                    {formData.logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, logoUrl: '' })}
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#dc2626', fontSize: 11, padding: '4px 8px' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid-responsive-2" style={{ gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
