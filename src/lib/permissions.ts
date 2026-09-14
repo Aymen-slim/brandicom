@@ -14,35 +14,44 @@ export function isAdmin(user: { role?: string } | null | undefined): boolean {
 }
 
 export const getSessionUser = cache(async (): Promise<CurrentUser | null> => {
-  const supabase = createServerSupabaseClient();
+  try {
+    const supabase = createServerSupabaseClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) return null;
 
-  const { data: profile } = await supabase
-    .from('users')
-    .select('id, name, email, role')
-    .eq('id', user.id)
-    .maybeSingle();
+    const { data: profile } = await supabase
+      .from('users')
+      .select('id, name, email, role')
+      .eq('id', user.id)
+      .maybeSingle();
 
-  if (!profile) {
-    const meta = (user.user_metadata || {}) as Record<string, string>;
+    if (!profile) {
+      const meta = (user.user_metadata || {}) as Record<string, string>;
+      return {
+        id: user.id,
+        name: meta.name || user.email?.split('@')[0] || 'User',
+        email: user.email || '',
+        role: (meta.role as 'admin' | 'member') || 'member',
+      };
+    }
+
     return {
-      id: user.id,
-      name: meta.name || user.email?.split('@')[0] || 'User',
-      email: user.email || '',
-      role: (meta.role as 'admin' | 'member') || 'member',
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      role: profile.role,
     };
+  } catch (err: any) {
+    if (err?.digest === 'DYNAMIC_SERVER_USAGE' || err?.digest?.startsWith?.('NEXT_')) {
+      throw err;
+    }
+    console.error('[getSessionUser] Auth check exception:', err);
+    return null;
   }
-
-  return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    role: profile.role,
-  };
 });
 
 export async function canAccessClient(

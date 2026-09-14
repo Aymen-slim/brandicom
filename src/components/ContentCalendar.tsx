@@ -1536,6 +1536,7 @@ export function ContentCalendar({
                     <option value="photo">Single Photo</option>
                     <option value="carousel">Carousel (10 slides)</option>
                     <option value="story">Story Sequence</option>
+                    <option value="ad">Paid Ad / Sponsor</option>
                   </select>
                 </div>
               </div>
@@ -1836,6 +1837,7 @@ export function ContentCalendar({
                     <option value="photo">Single Photo</option>
                     <option value="carousel">Carousel (10 slides)</option>
                     <option value="story">Story Sequence</option>
+                    <option value="ad">Paid Ad / Sponsor</option>
                   </select>
                 </div>
               </div>

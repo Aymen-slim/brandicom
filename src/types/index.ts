@@ -10,7 +10,7 @@ export type CreatorRole =
   | 'editor'
   | 'designer'
   | 'model';
-export type DeliverableFormat = 'reel' | 'photo' | 'story' | 'carousel';
+export type DeliverableFormat = 'reel' | 'photo' | 'story' | 'carousel' | 'ad';
 export type Platform = 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'both';
 export type DeliverableStatus = 'idea' | 'scripted' | 'filmed' | 'editing' | 'scheduled' | 'published';
 export type PartnerType = 'individual' | 'agency';
@@ -190,6 +190,7 @@ export interface ClientMonthlyGoals {
   reels?: number;
   posts?: number;
   stories?: number;
+  ads?: number;
   other?: number;
   otherLabel?: string;
   selectedFormats?: string[];

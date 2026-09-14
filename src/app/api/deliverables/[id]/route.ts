@@ -174,27 +174,72 @@ export async function PATCH(
       .select(selectQuery)
       .maybeSingle();
 
-    if (
-      updateRes.error &&
-      (updateRes.error.code === '42703' ||
+    if (updateRes.error) {
+      let retryNeeded = false;
+      if (
+        updateRes.error.code === '42703' ||
         updateRes.error.message?.includes('filming_date') ||
-        updateRes.error.message?.includes('publish_time'))
-    ) {
-      delete dataToUpdate.publish_time;
-      delete dataToUpdate.filming_date;
-      if (Object.keys(dataToUpdate).length > 0) {
+        updateRes.error.message?.includes('publish_time')
+      ) {
+        delete dataToUpdate.publish_time;
+        delete dataToUpdate.filming_date;
+        retryNeeded = true;
+      }
+      if (
+        dataToUpdate.format === 'ad' &&
+        (updateRes.error.code === '22P02' ||
+          updateRes.error.message?.includes('deliverable_format'))
+      ) {
+        dataToUpdate.format = null;
+        let currentResults = dataToUpdate.results;
+        if (currentResults === undefined) {
+          const { data: curDeliv } = await supabase
+            .from('deliverables')
+            .select('results')
+            .eq('id', deliverableId)
+            .single();
+          currentResults = curDeliv?.results || null;
+        }
+        dataToUpdate.results = currentResults
+          ? `${currentResults} [format:ad]`
+          : '[format:ad]';
+        retryNeeded = true;
+      }
+
+      if (retryNeeded) {
         updateRes = await supabase
           .from('deliverables')
           .update(dataToUpdate)
           .eq('id', deliverableId)
           .select(DELIVERABLE_SELECT_BASE)
           .maybeSingle();
-      } else {
-        updateRes = await supabase
-          .from('deliverables')
-          .select(DELIVERABLE_SELECT_BASE)
-          .eq('id', deliverableId)
-          .maybeSingle();
+
+        if (
+          updateRes.error &&
+          dataToUpdate.format === 'ad' &&
+          (updateRes.error.code === '22P02' ||
+            updateRes.error.message?.includes('deliverable_format'))
+        ) {
+          dataToUpdate.format = null;
+          let currentResults = dataToUpdate.results;
+          if (currentResults === undefined) {
+            const { data: curDeliv } = await supabase
+              .from('deliverables')
+              .select('results')
+              .eq('id', deliverableId)
+              .single();
+            currentResults = curDeliv?.results || null;
+          }
+          dataToUpdate.results = currentResults
+            ? `${currentResults} [format:ad]`
+            : '[format:ad]';
+          updateRes = await supabase
+            .from('deliverables')
+            .update(dataToUpdate)
+            .eq('id', deliverableId)
+            .select(DELIVERABLE_SELECT_BASE)
+            .maybeSingle();
+        }
       }
     }
 

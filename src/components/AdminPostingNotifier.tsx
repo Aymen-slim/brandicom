@@ -41,7 +41,12 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
     if (!isAdmin) return;
     try {
       setLoading(true);
-      const res = await fetch('/api/notifications/posting-alerts');
+      const res = await fetch('/api/notifications/posting-alerts', {
+        credentials: 'same-origin',
+      });
+      if (res.status === 401) {
+        return;
+      }
       if (res.ok) {
         const json: AlertData = await res.json();
         setData(json);
@@ -59,14 +64,16 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
         }
       }
     } catch (err) {
-      console.error('Failed to fetch posting alerts:', err);
+      console.warn('Could not fetch posting alerts:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchAlerts();
+    if (isAdmin) {
+      fetchAlerts();
+    }
 
     // Close dropdown on outside click
     const handleClickOutside = (e: MouseEvent) => {

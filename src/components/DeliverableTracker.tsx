@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { DeliverableData, DeliverableFormat, DeliverableStatus, Platform } from '@/types';
 import {
   CheckCircle2,
@@ -45,6 +45,11 @@ export function DeliverableTracker({
   const [isAdding, setIsAdding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [postSortOrder, setPostSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  useEffect(() => {
+    setDeliverables(initialDeliverables);
+  }, [initialDeliverables]);
 
   // Sync state & inline link editing state
   const [syncingId, setSyncingId] = useState<string | null>(null);
@@ -577,9 +582,9 @@ export function DeliverableTracker({
     };
   }, [deliverables]);
 
-  // Filtered deliverables
+  // Filtered and chronologically sorted deliverables by the day they will post
   const filteredDeliverables = useMemo(() => {
-    return deliverables.filter((d) => {
+    const list = deliverables.filter((d) => {
       if (viewMode === 'filming') {
         if (filterStatus === 'unfilmed') return !d.filmed;
         if (filterStatus === 'filmed') return d.filmed;
@@ -589,7 +594,30 @@ export function DeliverableTracker({
       }
       return true;
     });
-  }, [deliverables, viewMode, filterStatus]);
+
+    return [...list].sort((a, b) => {
+      const dateA = a.publishDate || (a.scheduledAt ? a.scheduledAt.split('T')[0] : null);
+      const dateB = b.publishDate || (b.scheduledAt ? b.scheduledAt.split('T')[0] : null);
+
+      if (dateA && dateB) {
+        if (dateA !== dateB) {
+          return postSortOrder === 'asc' ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+        }
+        const timeA = a.publishTime || (a.scheduledAt ? a.scheduledAt.split('T')[1] || '' : '');
+        const timeB = b.publishTime || (b.scheduledAt ? b.scheduledAt.split('T')[1] || '' : '');
+        if (timeA && timeB && timeA !== timeB) {
+          return postSortOrder === 'asc' ? timeA.localeCompare(timeB) : timeB.localeCompare(timeA);
+        }
+        return (b.createdAt || '').localeCompare(a.createdAt || '');
+      }
+
+      // Items with post dates appear before unscheduled items
+      if (dateA && !dateB) return -1;
+      if (!dateA && dateB) return 1;
+
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+  }, [deliverables, viewMode, filterStatus, postSortOrder]);
 
   const platformPills: Record<string, { bg: string; text: string }> = {
     instagram: { bg: '#fdf2f8', text: '#db2777' },
@@ -928,6 +956,7 @@ export function DeliverableTracker({
                 <option value="photo">Photo Still</option>
                 <option value="story">Story</option>
                 <option value="carousel">Carousel</option>
+                <option value="ad">Paid Ad / Sponsor</option>
               </select>
             </div>
 
@@ -1195,10 +1224,25 @@ export function DeliverableTracker({
                 </div>
               </th>
 
-              {/* Posting Column Header */}
-              <th style={{ width: viewMode === 'posting' ? '180px' : '150px', minWidth: '140px', background: '#f8fafc' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#1d4ed8', fontWeight: 700 }}>
-                  <Send size={12} /> Posting
+              {/* Posting Column Header (Clickable Sort Toggle) */}
+              <th
+                style={{
+                  width: viewMode === 'posting' ? '180px' : '150px',
+                  minWidth: '140px',
+                  background: '#f8fafc',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+                onClick={() => setPostSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                title={`Sorted by Posting Day (${postSortOrder === 'asc' ? 'Soonest first' : 'Latest first'}). Click to reverse sort.`}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#1d4ed8', fontWeight: 700 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <Send size={12} /> Posting
+                  </div>
+                  <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>
+                    {postSortOrder === 'asc' ? '↑ Day' : '↓ Day'}
+                  </span>
                 </div>
               </th>
 
@@ -1820,12 +1864,14 @@ export function DeliverableTracker({
                               padding: '1.5px 7px',
                               borderRadius: '4px',
                               fontSize: '11px',
-                              backgroundColor: '#f3f4f6',
-                              color: '#6b7280',
+                              backgroundColor: d.format === 'ad' ? '#fef3c7' : '#f3f4f6',
+                              color: d.format === 'ad' ? '#b45309' : '#6b7280',
+                              fontWeight: d.format === 'ad' ? 700 : 500,
                               textTransform: 'capitalize',
+                              border: d.format === 'ad' ? '1px solid #fde68a' : undefined,
                             }}
                           >
-                            {d.format}
+                            {d.format === 'ad' ? 'Paid Ad' : d.format}
                           </span>
                         )}
                       </div>
@@ -2040,6 +2086,7 @@ export function DeliverableTracker({
                     <option value="photo">Photo Still</option>
                     <option value="carousel">Carousel</option>
                     <option value="story">Story</option>
+                    <option value="ad">Paid Ad / Sponsor</option>
                   </select>
                 </div>
               </div>

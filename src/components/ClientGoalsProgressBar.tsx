@@ -48,6 +48,7 @@ export function ClientGoalsProgressBar({
       (client.monthlyGoals?.reels ?? 0) > 0 ? 'reels' : null,
       (client.monthlyGoals?.posts ?? 0) > 0 ? 'posts' : null,
       (client.monthlyGoals?.stories ?? 0) > 0 ? 'stories' : null,
+      (client.monthlyGoals?.ads ?? 0) > 0 ? 'ads' : null,
       (client.monthlyGoals?.other ?? 0) > 0 ? 'other' : null,
     ].filter(Boolean) as string[]
   );
@@ -64,6 +65,9 @@ export function ClientGoalsProgressBar({
   );
   const [storiesInput, setStoriesInput] = useState(
     client.monthlyGoals?.stories != null && client.monthlyGoals.stories > 0 ? String(client.monthlyGoals.stories) : '15'
+  );
+  const [adsInput, setAdsInput] = useState(
+    client.monthlyGoals?.ads != null && client.monthlyGoals.ads > 0 ? String(client.monthlyGoals.ads) : '5'
   );
   const [otherInput, setOtherInput] = useState(
     client.monthlyGoals?.other != null && client.monthlyGoals.other > 0 ? String(client.monthlyGoals.other) : '8'
@@ -85,6 +89,7 @@ export function ClientGoalsProgressBar({
         (goals?.reels ?? 0) > 0 ? 'reels' : null,
         (goals?.posts ?? 0) > 0 ? 'posts' : null,
         (goals?.stories ?? 0) > 0 ? 'stories' : null,
+        (goals?.ads ?? 0) > 0 ? 'ads' : null,
         (goals?.other ?? 0) > 0 ? 'other' : null,
       ].filter(Boolean) as string[]
     );
@@ -92,6 +97,7 @@ export function ClientGoalsProgressBar({
     setReelsInput(String(goals?.reels || '12'));
     setPostsInput(String(goals?.posts || '4'));
     setStoriesInput(String(goals?.stories || '15'));
+    setAdsInput(String(goals?.ads || '5'));
     setOtherInput(String(goals?.other || '8'));
     setOtherLabelInput(goals?.otherLabel || 'TikToks / UGC');
     setShowGoalModal(true);
@@ -106,6 +112,7 @@ export function ClientGoalsProgressBar({
         reels: selectedFormats.includes('reels') ? Math.max(0, parseInt(reelsInput, 10) || 0) : 0,
         posts: selectedFormats.includes('posts') ? Math.max(0, parseInt(postsInput, 10) || 0) : 0,
         stories: selectedFormats.includes('stories') ? Math.max(0, parseInt(storiesInput, 10) || 0) : 0,
+        ads: selectedFormats.includes('ads') ? Math.max(0, parseInt(adsInput, 10) || 0) : 0,
         other: selectedFormats.includes('other') ? Math.max(0, parseInt(otherInput, 10) || 0) : 0,
         otherLabel: otherLabelInput.trim() || 'Other Content',
       };
@@ -162,6 +169,8 @@ export function ClientGoalsProgressBar({
         return <ImageIcon size={15} color="#10b981" />;
       case 'stories':
         return <Smartphone size={15} color="#f59e0b" />;
+      case 'ads':
+        return <Flame size={15} color="#ea580c" />;
       default:
         return <Sparkles size={15} color="#ec4899" />;
     }
@@ -192,6 +201,14 @@ export function ClientGoalsProgressBar({
           text: '#d97706',
           border: '#fef3c7',
           badgeBg: '#fffbeb',
+        };
+      case 'ads':
+        return {
+          barBg: '#ffedd5',
+          barFill: 'linear-gradient(90deg, #f97316, #fb923c)',
+          text: '#c2410c',
+          border: '#fed7aa',
+          badgeBg: '#fff7ed',
         };
       default:
         return {
@@ -626,6 +643,7 @@ export function ClientGoalsProgressBar({
                   { key: 'reels', label: 'Reels', icon: <Film size={14} color="#6366f1" /> },
                   { key: 'posts', label: 'Posts (Photos/Carousels)', icon: <ImageIcon size={14} color="#10b981" /> },
                   { key: 'stories', label: 'Stories', icon: <Smartphone size={14} color="#f59e0b" /> },
+                  { key: 'ads', label: 'Paid Ads / Sponsored', icon: <Flame size={14} color="#ea580c" /> },
                   { key: 'other', label: 'Other / Custom Format', icon: <Sparkles size={14} color="#ec4899" /> },
                 ].map((item) => {
                   const isChecked = selectedFormats.includes(item.key);
@@ -711,6 +729,24 @@ export function ClientGoalsProgressBar({
                       placeholder="e.g. 20"
                       value={storiesInput}
                       onChange={(e) => setStoriesInput(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {selectedFormats.includes('ads') && (
+                  <div>
+                    <label style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      <Flame size={14} color="#ea580c" /> Monthly Paid Ads Target *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      required
+                      className="input-field"
+                      placeholder="e.g. 5"
+                      value={adsInput}
+                      onChange={(e) => setAdsInput(e.target.value)}
                     />
                   </div>
                 )}

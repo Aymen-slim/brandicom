@@ -36,7 +36,7 @@ export const CREATOR_ROLES: CreatorRole[] = [
   'designer',
   'model',
 ];
-export const DELIVERABLE_FORMATS: DeliverableFormat[] = ['reel', 'photo', 'story', 'carousel'];
+export const DELIVERABLE_FORMATS: DeliverableFormat[] = ['reel', 'photo', 'story', 'carousel', 'ad'];
 export const PLATFORMS: Platform[] = ['instagram', 'tiktok', 'facebook', 'youtube', 'both'];
 export const DELIVERABLE_STATUSES: DeliverableStatus[] = [
   'idea',
@@ -50,10 +50,42 @@ export const DELIVERABLE_STATUSES: DeliverableStatus[] = [
 export const isClientStatus = (v: unknown): v is ClientStatus => CLIENT_STATUSES.includes(v as ClientStatus);
 export const isCreatorRole = (v: unknown): v is CreatorRole => CREATOR_ROLES.includes(v as CreatorRole);
 export const isDeliverableFormat = (v: unknown): v is DeliverableFormat =>
-  DELIVERABLE_FORMATS.includes(v as DeliverableFormat);
+  DELIVERABLE_FORMATS.includes(v as DeliverableFormat) || v === 'ads';
 export const isPlatform = (v: unknown): v is Platform => PLATFORMS.includes(v as Platform);
 export const isDeliverableStatus = (v: unknown): v is DeliverableStatus =>
   DELIVERABLE_STATUSES.includes(v as DeliverableStatus);
+
+/**
+ * Sorts deliverables chronologically by the day they will be posted (publishDate / scheduledAt).
+ * Unscheduled ideas (no publish date) are placed at the end.
+ */
+export function compareDeliverablesByPostDate(
+  a: DeliverableData,
+  b: DeliverableData,
+  ascending = true
+): number {
+  const dateA = a.publishDate || (a.scheduledAt ? a.scheduledAt.split('T')[0] : null);
+  const dateB = b.publishDate || (b.scheduledAt ? b.scheduledAt.split('T')[0] : null);
+
+  if (dateA && dateB) {
+    if (dateA !== dateB) {
+      return ascending ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+    }
+    const timeA = a.publishTime || (a.scheduledAt ? a.scheduledAt.split('T')[1] || '' : '');
+    const timeB = b.publishTime || (b.scheduledAt ? b.scheduledAt.split('T')[1] || '' : '');
+    if (timeA && timeB && timeA !== timeB) {
+      return ascending ? timeA.localeCompare(timeB) : timeB.localeCompare(timeA);
+    }
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  }
+
+  // Scheduled deliverables come before unscheduled ones
+  if (dateA && !dateB) return -1;
+  if (!dateA && dateB) return 1;
+
+  // Unscheduled items sorted newest first
+  return (b.createdAt || '').localeCompare(a.createdAt || '');
+}
 
 export function sanitizeSearchTerm(term: string): string {
   return term.replace(/[,().%_]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -265,6 +297,15 @@ export function mapDeliverableRow(row: any): DeliverableData {
   const filmingDate = row.filming_date ?? creatorAssignments[0]?.scheduledDate ?? null;
   const parsedLinks = parseDeliverableLinks(row.link, row.platform);
 
+  let format: DeliverableFormat | null = row.format;
+  let results: string | null = row.results ?? null;
+  if ((format as any) === 'ads') {
+    format = 'ad';
+  } else if (!format && results && results.includes('[format:ad]')) {
+    format = 'ad';
+    results = results.replace(/\[format:ad\]\s*/g, '').trim() || null;
+  }
+
   let publishTime: string | null = row.publish_time ?? null;
   if (!publishTime && row.scheduled_at) {
     try {
@@ -293,9 +334,9 @@ export function mapDeliverableRow(row: any): DeliverableData {
     link: parsedLinks.primaryLink || row.link,
     instagramLink: parsedLinks.instagramLink,
     tiktokLink: parsedLinks.tiktokLink,
-    format: row.format,
+    format,
     platform: parsedLinks.platform || row.platform,
-    results: row.results,
+    results,
     publishDate: row.publish_date,
     publishTime,
     filmingDate,
@@ -524,6 +565,7 @@ export async function fetchClientDetail(clientId: string, user?: CurrentUser | n
       .from('deliverables')
       .select(delivSelect)
       .eq('client_id', clientId)
+      .order('publish_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false }),
     supabase
       .from('creator_assignments')
@@ -558,6 +600,7 @@ export async function fetchClientDetail(clientId: string, user?: CurrentUser | n
       .from('deliverables')
       .select(DELIVERABLE_SELECT_BASE)
       .eq('client_id', clientId)
+      .order('publish_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
     if (fallbackRes.error) throw fallbackRes.error;
     deliverablesRows = fallbackRes.data || [];
@@ -579,7 +622,9 @@ export async function fetchClientDetail(clientId: string, user?: CurrentUser | n
 
   const contract = contractRes.data ? mapContract(contractRes.data) : null;
   const client = mapClientRow(clientRow, { contract, health });
-  const deliverables = (deliverablesRows || []).map(mapDeliverableRow);
+  const deliverables = (deliverablesRows || [])
+    .map(mapDeliverableRow)
+    .sort((a: DeliverableData, b: DeliverableData) => compareDeliverablesByPostDate(a, b, true));
 
   const creatorAssignments = (creatorAssignmentsRes.data || []).map((ca: any) => ({
     id: ca.id,
@@ -610,6 +655,7 @@ export async function fetchDeliverables(clientId: string): Promise<DeliverableDa
     .from('deliverables')
     .select(delivSelect)
     .eq('client_id', clientId)
+    .order('publish_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false });
 
   if (res.error) {
@@ -617,11 +663,14 @@ export async function fetchDeliverables(clientId: string): Promise<DeliverableDa
       .from('deliverables')
       .select(DELIVERABLE_SELECT_BASE)
       .eq('client_id', clientId)
+      .order('publish_date', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false });
   }
 
   if (res.error) throw res.error;
-  return (res.data || []).map(mapDeliverableRow);
+  return (res.data || [])
+    .map(mapDeliverableRow)
+    .sort((a: DeliverableData, b: DeliverableData) => compareDeliverablesByPostDate(a, b, true));
 }
 
 export async function fetchCalendarDeliverables(opts?: {

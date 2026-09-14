@@ -9,6 +9,7 @@ export function extractClientMonthlyGoals(tags: string[] = []): ClientMonthlyGoa
   let reels = 0;
   let posts = 0;
   let stories = 0;
+  let ads = 0;
   let other = 0;
   let otherLabel = 'Other';
   let selectedFormats: string[] | undefined = undefined;
@@ -25,6 +26,9 @@ export function extractClientMonthlyGoals(tags: string[] = []): ClientMonthlyGoa
       } else if (tag.startsWith('goal:stories:')) {
         const parsed = parseInt(tag.slice('goal:stories:'.length), 10);
         if (!isNaN(parsed) && parsed >= 0) stories = parsed;
+      } else if (tag.startsWith('goal:ads:')) {
+        const parsed = parseInt(tag.slice('goal:ads:'.length), 10);
+        if (!isNaN(parsed) && parsed >= 0) ads = parsed;
       } else if (tag.startsWith('goal:other:')) {
         const parts = tag.slice('goal:other:'.length).split(':');
         const num = parseInt(parts[0], 10);
@@ -49,11 +53,12 @@ export function extractClientMonthlyGoals(tags: string[] = []): ClientMonthlyGoa
     if (reels > 0) auto.push('reels');
     if (posts > 0) auto.push('posts');
     if (stories > 0) auto.push('stories');
+    if (ads > 0) auto.push('ads');
     if (other > 0) auto.push('other');
     selectedFormats = auto;
   }
 
-  return { reels, posts, stories, other, otherLabel, selectedFormats };
+  return { reels, posts, stories, ads, other, otherLabel, selectedFormats };
 }
 
 /**
@@ -70,6 +75,7 @@ export function packClientMonthlyGoals(
           !t.startsWith('goal:reels:') &&
           !t.startsWith('goal:posts:') &&
           !t.startsWith('goal:stories:') &&
+          !t.startsWith('goal:ads:') &&
           !t.startsWith('goal:other:') &&
           !t.startsWith('goal:formats:')
       )
@@ -79,6 +85,7 @@ export function packClientMonthlyGoals(
   const reels = goals.reels ?? 0;
   const posts = goals.posts ?? 0;
   const stories = goals.stories ?? 0;
+  const ads = goals.ads ?? 0;
   const other = goals.other ?? 0;
   const otherLabel = (goals.otherLabel || 'Other').trim();
 
@@ -87,10 +94,11 @@ export function packClientMonthlyGoals(
     base.push(`goal:formats:${selected.length > 0 ? selected.join(',') : 'none'}`);
   }
 
-  const activeFormats = selected !== undefined ? selected : ['reels', 'posts', 'stories', 'other'];
+  const activeFormats = selected !== undefined ? selected : ['reels', 'posts', 'stories', 'ads', 'other'];
   if (activeFormats.includes('reels') && reels > 0) base.push(`goal:reels:${reels}`);
   if (activeFormats.includes('posts') && posts > 0) base.push(`goal:posts:${posts}`);
   if (activeFormats.includes('stories') && stories > 0) base.push(`goal:stories:${stories}`);
+  if (activeFormats.includes('ads') && ads > 0) base.push(`goal:ads:${ads}`);
   if (activeFormats.includes('other') && other > 0) {
     base.push(`goal:other:${other}:${encodeURIComponent(otherLabel)}`);
   }
@@ -99,7 +107,7 @@ export function packClientMonthlyGoals(
 }
 
 export interface GoalItemProgress {
-  key: 'reels' | 'posts' | 'stories' | 'other';
+  key: 'reels' | 'posts' | 'stories' | 'ads' | 'other';
   label: string;
   selected: boolean;
   target: number;
@@ -123,6 +131,7 @@ export interface ClientGoalsProgress {
   reels: GoalItemProgress;
   posts: GoalItemProgress;
   stories: GoalItemProgress;
+  ads?: GoalItemProgress;
   other: GoalItemProgress;
   visibleGoals: GoalItemProgress[];
   totalTarget: number;
@@ -183,6 +192,7 @@ export function computeClientGoalsProgress(
   const isReelsSelected = selectedFormats.has('reels');
   const isPostsSelected = selectedFormats.has('posts');
   const isStoriesSelected = selectedFormats.has('stories');
+  const isAdsSelected = selectedFormats.has('ads');
   const isOtherSelected = selectedFormats.has('other');
 
   // 1. Reels
@@ -206,12 +216,22 @@ export function computeClientGoalsProgress(
   const storiesHit = storiesTarget === 0 || storiesCounts.published >= storiesTarget;
   const storiesPercent = storiesTarget > 0 ? Math.min(100, Math.round((storiesCounts.published / storiesTarget) * 100)) : (storiesCounts.published > 0 ? 100 : 0);
 
-  // 4. Other (custom content)
+  // 4. Ads / Sponsored Content
+  const adsCounts = countFor((d) => d.format === 'ad' || (d.format as any) === 'ads');
+  const adsTarget = isAdsSelected ? goals.ads || 0 : 0;
+  const adsRemaining = Math.max(0, adsTarget - adsCounts.published);
+  const adsHit = adsTarget === 0 || adsCounts.published >= adsTarget;
+  const adsPercent = adsTarget > 0 ? Math.min(100, Math.round((adsCounts.published / adsTarget) * 100)) : (adsCounts.published > 0 ? 100 : 0);
+
+  // 5. Other (custom content)
   const otherLabel = (goals.otherLabel || 'Other Content').trim();
+  const isOtherAds = otherLabel.toLowerCase().includes('ad');
   const otherCounts = countFor((d) => {
-    // Matches deliverables that aren't reels, standard posts, or stories, or match label
     const f = d.format;
-    return f !== 'reel' && f !== 'photo' && f !== 'carousel' && f !== 'story';
+    if (isOtherAds) {
+      return f === 'ad' || (f as any) === 'ads' || (f !== 'reel' && f !== 'photo' && f !== 'carousel' && f !== 'story');
+    }
+    return f !== 'reel' && f !== 'photo' && f !== 'carousel' && f !== 'story' && f !== 'ad' && (f as any) !== 'ads';
   });
   const otherTarget = isOtherSelected ? goals.other || 0 : 0;
   const otherRemaining = Math.max(0, otherTarget - otherCounts.published);
@@ -254,6 +274,18 @@ export function computeClientGoalsProgress(
     hit: storiesHit,
   };
 
+  const adsItem: GoalItemProgress = {
+    key: 'ads',
+    label: 'Paid Ads / Campaigns',
+    selected: isAdsSelected,
+    target: adsTarget,
+    published: adsCounts.published,
+    inProgress: adsCounts.inProgress,
+    remaining: adsRemaining,
+    percent: adsPercent,
+    hit: adsHit,
+  };
+
   const otherItem: GoalItemProgress = {
     key: 'other',
     label: otherLabel || 'Other Content',
@@ -267,7 +299,7 @@ export function computeClientGoalsProgress(
   };
 
   // Visible goals: ONLY items that are selected and have a target > 0!
-  const allItems = [reelsItem, postsItem, storiesItem, otherItem];
+  const allItems = [reelsItem, postsItem, storiesItem, adsItem, otherItem];
   const visibleGoals = allItems.filter((item) => item.selected && item.target > 0);
 
   // Totals across selected goals
