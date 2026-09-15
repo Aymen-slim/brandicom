@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/permissions';
 import { computeGoalsAndMetrics, getDashboardClients } from '@/lib/goals';
-import { fetchClients } from '@/lib/data';
+import { fetchClientOptions } from '@/lib/data';
 import { AppShell } from '@/components/AppShell';
 import { GoalProgressCard } from '@/components/GoalProgressCard';
 import { GaugeCard } from '@/components/GaugeCard';
@@ -28,7 +28,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const [metrics, top, clients, atRiskRes] = await Promise.all([
     computeGoalsAndMetrics(period),
     getDashboardClients(period),
-    fetchClients({ userRole: user.role, userId: user.id }),
+    fetchClientOptions({ userRole: user.role, limit: 4 }),
     supabase
       .from('client_health_snapshots')
       .select('client_id, score, risk, ai_summary, computed_at, clients(id, name, status)')
@@ -38,10 +38,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   ]);
 
   const atRisk = atRiskRes.data;
-  const sidebarClients = clients.slice(0, 4).map((c) => ({
+  const sidebarClients = clients.map((c) => ({
     id: c.id,
     name: c.name,
-    monthlyFee: user.role === 'admin' ? c.contract?.monthlyFee ?? null : null,
+    monthlyFee: c.monthlyFee,
   }));
 
   return (

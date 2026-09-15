@@ -7,8 +7,8 @@ import { ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@agency.com');
-  const [password, setPassword] = useState('admin123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -122,6 +122,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
             <label
+              htmlFor="login-email"
               style={{
                 fontSize: '11.5px',
                 fontWeight: 600,
@@ -139,7 +140,10 @@ export default function LoginPage() {
                 style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
               />
               <input
+                id="login-email"
+                name="email"
                 type="email"
+                autoComplete="username"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -152,6 +156,7 @@ export default function LoginPage() {
 
           <div>
             <label
+              htmlFor="login-password"
               style={{
                 fontSize: '11.5px',
                 fontWeight: 600,
@@ -169,7 +174,10 @@ export default function LoginPage() {
                 style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
               />
               <input
+                id="login-password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

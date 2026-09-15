@@ -4,18 +4,19 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ClientData, DeliverableData, MessageData, UserSummary } from '@/types';
 import { ClientDetailHeader } from './ClientDetailHeader';
-import { DeliverableTracker } from './DeliverableTracker';
 import { ClientGoalsProgressBar } from './ClientGoalsProgressBar';
 import { computeClientGoalsProgress } from '@/lib/clientGoals';
-import { ChatThread } from './ChatThread';
-import { ClientInspirationBoard } from './ClientInspirationBoard';
-import { MetricsEntryModal } from './MetricsEntryModal';
 import dynamic from 'next/dynamic';
 import { formatMoney, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
 import { InstagramIcon, TikTokIcon } from './SocialIcons';
 import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight, AlertTriangle, Calendar, X } from 'lucide-react';
 
 const Markdown = dynamic(() => import('react-markdown'), { ssr: false });
+const tabLoading = () => <div style={{ padding: 20, fontSize: 12, color: '#9ca3af' }}>Loading...</div>;
+const DeliverableTracker = dynamic(() => import('./DeliverableTracker').then((m) => m.DeliverableTracker), { loading: tabLoading });
+const ChatThread = dynamic(() => import('./ChatThread').then((m) => m.ChatThread), { loading: tabLoading });
+const ClientInspirationBoard = dynamic(() => import('./ClientInspirationBoard').then((m) => m.ClientInspirationBoard), { loading: tabLoading });
+const MetricsEntryModal = dynamic(() => import('./MetricsEntryModal').then((m) => m.MetricsEntryModal));
 
 type Tab = 'overview' | 'content' | 'engagement' | 'partners' | 'finance' | 'chat';
 

@@ -2,8 +2,10 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import Markdown from 'react-markdown';
+import dynamic from 'next/dynamic';
 import { Sparkles, X, Send, Check, Ban } from 'lucide-react';
+
+const Markdown = dynamic(() => import('react-markdown'), { ssr: false });
 
 interface ChatItem {
   role: 'user' | 'assistant';

@@ -1,17 +1,20 @@
 import { createServerSupabaseClient } from './supabase/server';
 import { CurrentUser } from './permissions';
 import { parseDeliverableLinks } from './deliverables';
-import { extractClientMonthlyGoals, packClientMonthlyGoals } from './clientGoals';
+import { extractClientMonthlyGoals, packClientMonthlyGoals, computeClientGoalsProgress } from './clientGoals';
 import { extractClientInspirations } from './clientInspirations';
 import { extractClientFollowerHistory } from './clientFollowers';
+import { currentMonth, shiftPeriod, isValidPeriod } from './period';
 import {
   AssignmentStatus,
   ClientAssignmentData,
   ClientContractData,
   ClientData,
   ClientHealthData,
+  ClientOption,
   ClientStatus,
   CreatorData,
+  CreatorOption,
   CreatorRole,
   DeliverableData,
   DeliverableFormat,
@@ -46,6 +49,28 @@ export const DELIVERABLE_STATUSES: DeliverableStatus[] = [
   'scheduled',
   'published',
 ];
+
+type DataClient = ReturnType<typeof createServerSupabaseClient>;
+
+async function readAllRows<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown; count: number | null }>,
+  limit?: number
+): Promise<T[]> {
+  const rows: T[] = [];
+  let total: number | null = null;
+  if (limit !== undefined && limit <= 0) return rows;
+  while (limit === undefined || rows.length < limit) {
+    const from = rows.length;
+    const size = limit === undefined ? 500 : Math.min(500, limit - from);
+    const { data, error, count } = await fetchPage(from, from + size - 1);
+    if (error) throw error;
+    if (count !== null) total = count;
+    if (!data?.length) break;
+    rows.push(...data);
+    if (total !== null && rows.length >= total) break;
+  }
+  return rows;
+}
 
 export const isClientStatus = (v: unknown): v is ClientStatus => CLIENT_STATUSES.includes(v as ClientStatus);
 export const isCreatorRole = (v: unknown): v is CreatorRole => CREATOR_ROLES.includes(v as CreatorRole);
@@ -102,6 +127,8 @@ const DELIVERABLE_SELECT_BASE = `id, client_id, idea, title, caption, hook, film
 const DELIVERABLE_SELECT = `id, client_id, idea, title, caption, hook, filmed, published, status, link, format, platform, results, publish_date, publish_time, filming_date, scheduled_at, thumbnail_url, created_by, created_at, users!deliverables_created_by_fkey(id, name, email, role), creator_assignments(id, scheduled_date, status, creators(id, name, role, instagram_handle, available, style_tags, partner_type, company)), post_metrics(id, deliverable_id, captured_at, views, likes, comments, shares, saves, reach, impressions, link_clicks, followers_gained, source, note)`;
 const CALENDAR_DELIVERABLE_SELECT_BASE = `${DELIVERABLE_SELECT_BASE}, clients(id, name)`;
 const CALENDAR_DELIVERABLE_SELECT = `${DELIVERABLE_SELECT}, clients(id, name)`;
+const CALENDAR_EVENT_SELECT_BASE = 'id, client_id, idea, title, filmed, published, status, link, format, platform, results, publish_date, scheduled_at, created_by, created_at, creator_assignments(id, scheduled_date, status, creators(id, name, role)), clients(id, name)';
+const CALENDAR_EVENT_SELECT = `${CALENDAR_EVENT_SELECT_BASE}, publish_time, filming_date`;
 let _filmingDateSupported: boolean | null = null;
 let _lastFilmingDateCheck = 0;
 
@@ -124,7 +151,10 @@ export function getDeliverableSelect(supportsFilmingDate: boolean): string {
   return supportsFilmingDate ? DELIVERABLE_SELECT : DELIVERABLE_SELECT_BASE;
 }
 
-export function getCalendarDeliverableSelect(supportsFilmingDate: boolean): string {
+export function getCalendarDeliverableSelect(supportsFilmingDate: boolean, lightweight = false): string {
+  if (lightweight) {
+    return supportsFilmingDate ? CALENDAR_EVENT_SELECT : CALENDAR_EVENT_SELECT_BASE;
+  }
   return supportsFilmingDate ? CALENDAR_DELIVERABLE_SELECT : CALENDAR_DELIVERABLE_SELECT_BASE;
 }
 
@@ -507,42 +537,100 @@ export async function fetchClients(opts: {
 }
 
 export async function attachClientCounts(clients: ClientData[]): Promise<ClientData[]> {
+  return loadClientListStats(createServerSupabaseClient(), clients, currentMonth());
+}
+
+interface ClientCountRow {
+  id: string;
+  deliverables: Array<{ count: number }> | null;
+  messages: Array<{ count: number }> | null;
+}
+
+interface PaceDeliverableRow {
+  id: string;
+  client_id: string | null;
+  format: string | null;
+  results: string | null;
+  status: string | null;
+  published: boolean | null;
+  publish_date: string | null;
+  scheduled_at: string | null;
+  created_at: string;
+}
+
+export async function loadClientListStats(
+  supabase: DataClient,
+  clients: ClientData[],
+  period: string
+): Promise<ClientData[]> {
   if (!clients || clients.length === 0) return [];
-  const supabase = createServerSupabaseClient();
+  if (!/^\d{4}-\d{2}$/.test(period) || !isValidPeriod(period)) {
+    throw new Error('Invalid monthly period');
+  }
+  const start = `${period}-01`;
+  const end = `${shiftPeriod(period, 1)}-01`;
+  const monthFilter = [
+    `and(publish_date.gte.${start},publish_date.lt.${end})`,
+    `and(publish_date.is.null,scheduled_at.gte.${start}T00:00:00Z,scheduled_at.lt.${end}T00:00:00Z)`,
+    `and(publish_date.is.null,scheduled_at.is.null,created_at.gte.${start}T00:00:00Z,created_at.lt.${end}T00:00:00Z)`,
+  ].join(',');
+
+  const countsByClient = new Map<string, ClientCountRow>();
+  const rowsByClient = new Map<string, DeliverableData[]>();
   const clientIds = clients.map((c) => c.id);
 
-  const [delivRes, msgRes] = await Promise.all([
-    supabase
-      .from('deliverables')
-      .select('client_id')
-      .in('client_id', clientIds),
-    supabase
-      .from('messages')
-      .select('client_id')
-      .in('client_id', clientIds),
-  ]);
+  for (let i = 0; i < clientIds.length; i += 100) {
+    const ids = clientIds.slice(i, i + 100);
+    const [countRows, monthRows] = await Promise.all([
+      readAllRows<ClientCountRow>((from, to) =>
+        supabase
+          .from('clients')
+          .select('id, deliverables(count), messages(count)', { count: from === 0 ? 'exact' : undefined })
+          .in('id', ids)
+          .order('id', { ascending: true })
+          .range(from, to)
+      ),
+      readAllRows<PaceDeliverableRow>((from, to) =>
+        supabase
+          .from('deliverables')
+          .select('id, client_id, format, results, status, published, publish_date, scheduled_at, created_at', { count: from === 0 ? 'exact' : undefined })
+          .in('client_id', ids)
+          .or(monthFilter)
+          .order('id', { ascending: true })
+          .range(from, to)
+      ),
+    ]);
 
-  const delivCountMap = new Map<string, number>();
-  for (const d of delivRes.data || []) {
-    if (d.client_id) {
-      delivCountMap.set(d.client_id, (delivCountMap.get(d.client_id) || 0) + 1);
+    for (const row of countRows) {
+      countsByClient.set(row.id, row);
+    }
+    for (const row of monthRows) {
+      if (row.client_id) {
+        const list = rowsByClient.get(row.client_id) || [];
+        list.push(mapDeliverableRow(row));
+        rowsByClient.set(row.client_id, list);
+      }
     }
   }
 
-  const msgCountMap = new Map<string, number>();
-  for (const m of msgRes.data || []) {
-    if (m.client_id) {
-      msgCountMap.set(m.client_id, (msgCountMap.get(m.client_id) || 0) + 1);
-    }
-  }
+  return clients.map((client) => {
+    const counts = countsByClient.get(client.id);
+    const pace = computeClientGoalsProgress(client, rowsByClient.get(client.id) || [], period);
 
-  return clients.map((client) => ({
-    ...client,
-    _count: {
-      deliverables: delivCountMap.get(client.id) ?? 0,
-      messages: msgCountMap.get(client.id) ?? 0,
-    },
-  }));
+    return {
+      ...client,
+      monthlyPace: {
+        delivered: pace.totalPublished,
+        target: pace.totalTarget,
+        percent: pace.totalPercent,
+        hasGoals: pace.hasGoals,
+      },
+      _count: {
+        deliverables: counts?.deliverables?.[0]?.count ?? 0,
+        messages: counts?.messages?.[0]?.count ?? 0,
+      },
+    };
+  });
 }
 
 export async function fetchClientDetail(clientId: string, user?: CurrentUser | null) {
@@ -673,23 +761,44 @@ export async function fetchDeliverables(clientId: string): Promise<DeliverableDa
     .sort((a: DeliverableData, b: DeliverableData) => compareDeliverablesByPostDate(a, b, true));
 }
 
-export async function fetchCalendarDeliverables(opts?: {
-  clientId?: string | null;
-}): Promise<DeliverableData[]> {
-  const supabase = createServerSupabaseClient();
-  const supportsFilmingDate = await isFilmingDateSupported(supabase);
-  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate);
-  let query = supabase.from('deliverables').select(delivSelect);
+export async function loadCalendarDeliverables(
+  supabase: DataClient,
+  opts: { clientId?: string | null; lightweight?: boolean },
+  supportsFilmingDate: boolean
+): Promise<DeliverableData[]> {
+  const lightweight = Boolean(opts.lightweight);
+  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate, lightweight);
+  const baseSelect = getCalendarDeliverableSelect(false, lightweight);
 
-  if (opts?.clientId) {
-    query = query.eq('client_id', opts.clientId);
+  if (lightweight) {
+    const buildPage = (selectStr: string, from: number, to: number) => {
+      let query = supabase.from('deliverables').select(selectStr, { count: from === 0 ? 'exact' : undefined });
+      if (opts.clientId) {
+        query = query.eq('client_id', opts.clientId);
+      }
+      return query
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to);
+    };
+    let rows: any[];
+    try {
+      rows = await readAllRows<any>((from, to) => buildPage(delivSelect, from, to));
+    } catch {
+      rows = await readAllRows<any>((from, to) => buildPage(baseSelect, from, to));
+    }
+    return rows.map(mapDeliverableRow);
   }
 
+  let query = supabase.from('deliverables').select(delivSelect);
+  if (opts.clientId) {
+    query = query.eq('client_id', opts.clientId);
+  }
   let res: any = await query.order('created_at', { ascending: false });
 
   if (res.error) {
-    let fallbackQuery = supabase.from('deliverables').select(CALENDAR_DELIVERABLE_SELECT_BASE);
-    if (opts?.clientId) {
+    let fallbackQuery = supabase.from('deliverables').select(baseSelect);
+    if (opts.clientId) {
       fallbackQuery = fallbackQuery.eq('client_id', opts.clientId);
     }
     res = await fallbackQuery.order('created_at', { ascending: false });
@@ -697,6 +806,15 @@ export async function fetchCalendarDeliverables(opts?: {
 
   if (res.error) throw res.error;
   return (res.data || []).map(mapDeliverableRow);
+}
+
+export async function fetchCalendarDeliverables(opts?: {
+  clientId?: string | null;
+  lightweight?: boolean;
+}): Promise<DeliverableData[]> {
+  const supabase = createServerSupabaseClient();
+  const supportsFilmingDate = await isFilmingDateSupported(supabase);
+  return loadCalendarDeliverables(supabase, opts || {}, supportsFilmingDate);
 }
 
 export async function fetchAdminPostingAlerts(): Promise<{
@@ -708,24 +826,24 @@ export async function fetchAdminPostingAlerts(): Promise<{
   const supabase = createServerSupabaseClient();
   const today = new Date().toISOString().split('T')[0];
   const supportsFilmingDate = await isFilmingDateSupported(supabase);
-  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate);
+  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate, true);
 
-  let res: any = await supabase
-    .from('deliverables')
-    .select(delivSelect)
-    .or('published.eq.false,filmed.eq.false')
-    .order('created_at', { ascending: false });
-
-  if (res.error) {
-    res = await supabase
+  const buildPage = (selectStr: string, from: number, to: number) =>
+    supabase
       .from('deliverables')
-      .select(CALENDAR_DELIVERABLE_SELECT_BASE)
+      .select(selectStr, { count: from === 0 ? 'exact' : undefined })
       .or('published.eq.false,filmed.eq.false')
-      .order('created_at', { ascending: false });
-  }
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to);
 
-  if (res.error) throw res.error;
-  const all: DeliverableData[] = (res.data || []).map(mapDeliverableRow);
+  let rows: any[];
+  try {
+    rows = await readAllRows<any>((from, to) => buildPage(delivSelect, from, to));
+  } catch {
+    rows = await readAllRows<any>((from, to) => buildPage(CALENDAR_EVENT_SELECT_BASE, from, to));
+  }
+  const all: DeliverableData[] = rows.map(mapDeliverableRow);
 
   const todayPosts = all
     .filter((d) => d.publishDate === today && !d.published)
@@ -838,6 +956,51 @@ export async function fetchGoals(): Promise<
     metric: g.metric,
     target: Number(g.target),
   }));
+}
+
+export async function fetchClientOptions(opts: {
+  userRole: string;
+  limit?: number;
+  includeLogo?: boolean;
+}): Promise<ClientOption[]> {
+  const supabase = createServerSupabaseClient();
+  const fields = ['id', 'name'];
+  if (opts.includeLogo) fields.push('logo_url');
+  if (opts.userRole === 'admin') fields.push('client_contracts(monthly_fee)');
+  const selectStr = fields.join(', ');
+
+  const rows = await readAllRows<any>(
+    (from, to) =>
+      supabase
+        .from('clients')
+        .select(selectStr, { count: from === 0 ? 'exact' : undefined })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to),
+    opts.limit
+  );
+
+  return rows.map((row) => {
+    let monthlyFee: number | null = null;
+    if (opts.userRole === 'admin') {
+      const contracts = row.client_contracts;
+      const contract = Array.isArray(contracts) ? contracts[0] : contracts;
+      monthlyFee = contract?.monthly_fee != null ? Number(contract.monthly_fee) : null;
+    }
+    return { id: row.id, name: row.name, logoUrl: row.logo_url ?? null, monthlyFee };
+  });
+}
+
+export async function fetchCreatorOptions(): Promise<CreatorOption[]> {
+  const supabase = createServerSupabaseClient();
+  return readAllRows<CreatorOption>((from, to) =>
+    supabase
+      .from('creators')
+      .select('id, name, role', { count: from === 0 ? 'exact' : undefined })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  );
 }
 
 export async function fetchAvailableCreators(): Promise<

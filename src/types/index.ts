@@ -254,11 +254,28 @@ export interface ClientData {
     } | null;
   }>;
   messages?: MessageData[];
+  monthlyPace?: MonthlyDeliveryPace;
   _count?: {
     deliverables: number;
     messages: number;
   };
 }
+
+export interface MonthlyDeliveryPace {
+  delivered: number;
+  target: number;
+  percent: number;
+  hasGoals: boolean;
+}
+
+export interface ClientOption {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  monthlyFee: number | null;
+}
+
+export type CreatorOption = Pick<CreatorData, 'id' | 'name' | 'role'>;
 
 export interface MessageData {
   id: string;

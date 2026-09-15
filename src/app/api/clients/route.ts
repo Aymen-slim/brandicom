@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enforceAuth, isAdmin } from '@/lib/permissions';
 import { fetchClients, attachClientCounts, createClient, isClientStatus } from '@/lib/data';
-import { packClientMonthlyGoals } from '@/lib/clientGoals';
+import { packClientMonthlyGoals, computeClientGoalsProgress } from '@/lib/clientGoals';
 
 export async function GET(request: NextRequest) {
   const { user, error } = await enforceAuth();
@@ -100,7 +100,20 @@ export async function POST(request: NextRequest) {
       isAdmin(user)
     );
 
-    return NextResponse.json(newClient, { status: 201 });
+    const pace = computeClientGoalsProgress(newClient, []);
+    return NextResponse.json(
+      {
+        ...newClient,
+        monthlyPace: {
+          delivered: pace.totalPublished,
+          target: pace.totalTarget,
+          percent: pace.totalPercent,
+          hasGoals: pace.hasGoals,
+        },
+        _count: { deliverables: 0, messages: 0 },
+      },
+      { status: 201 }
+    );
   } catch (err: any) {
     console.error('Error creating client:', err);
     return NextResponse.json({ error: 'Failed to create client' }, { status: 500 });

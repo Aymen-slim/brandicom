@@ -2,7 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { DeliverableData, ClientData, CreatorData, Platform, DeliverableFormat, DeliverableStatus } from '@/types';
+import { DeliverableData, ClientOption, CreatorOption, Platform, DeliverableFormat, DeliverableStatus } from '@/types';
+import { getProxiedImageUrl } from '@/lib/format';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -28,8 +29,8 @@ import { InstagramIcon, TikTokIcon } from '@/components/SocialIcons';
 
 interface ContentCalendarProps {
   initialDeliverables: DeliverableData[];
-  clients: ClientData[];
-  creators: CreatorData[];
+  clients: ClientOption[];
+  creators: CreatorOption[];
   userRole: string;
 }
 
@@ -58,6 +59,18 @@ const MONTH_NAMES = [
 ];
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function ClientLogo({ name, logoUrl, size = 24 }: { name: string; logoUrl?: string | null; size?: number }) {
+  const src = getProxiedImageUrl(logoUrl);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  return (
+    <span style={{ width: size, height: size, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: '#eef2ff', color: '#4338ca', border: '1px solid #e2e8f0', fontSize: Math.max(8, size * 0.4), fontWeight: 700 }}>
+      {src && failedSrc !== src ? (
+        <img src={src} alt={`${name} logo`} width={size} height={size} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : <span aria-hidden="true">{name.slice(0, 2).toUpperCase()}</span>}
+    </span>
+  );
+}
 
 export function ContentCalendar({
   initialDeliverables,
@@ -126,9 +139,9 @@ export function ContentCalendar({
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
 
   const clientMap = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, ClientOption>();
     for (const c of clients) {
-      map.set(c.id, c.name);
+      map.set(c.id, c);
     }
     return map;
   }, [clients]);
@@ -139,7 +152,7 @@ export function ContentCalendar({
 
     deliverables.forEach((del) => {
       // Find client name in O(1)
-      const clientName = del.clientName || clientMap.get(del.clientId) || 'Client';
+      const clientName = del.clientName || clientMap.get(del.clientId)?.name || 'Client';
 
       // 1. Filming Event (Shoot)
       if (del.filmingDate) {
@@ -1066,9 +1079,12 @@ export function ContentCalendar({
 
                           {/* Client Name & Platform Badges */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
-                            <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {evt.clientName}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                              <ClientLogo name={evt.clientName} logoUrl={clientMap.get(evt.deliverable.clientId)?.logoUrl} size={18} />
+                              <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                                {evt.clientName}
+                              </span>
+                            </div>
                             {evt.deliverable.platform === 'both' || (evt.deliverable.instagramLink && evt.deliverable.tiktokLink) ? (
                               <div style={{ display: 'inline-flex', gap: '2px', flexShrink: 0 }}>
                                 <span style={{ fontSize: '8px', fontWeight: 800, color: '#db2777', backgroundColor: '#fdf2f8', padding: '1px 3px', borderRadius: '2px', lineHeight: 1 }}>IG</span>
@@ -1205,8 +1221,11 @@ export function ContentCalendar({
                           </div>
 
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#111827' }}>
-                              {evt.clientName}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                              <ClientLogo name={evt.clientName} logoUrl={clientMap.get(evt.deliverable.clientId)?.logoUrl} size={24} />
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                                {evt.clientName}
+                              </span>
                             </div>
                             {evt.deliverable.platform === 'both' || (evt.deliverable.instagramLink && evt.deliverable.tiktokLink) ? (
                               <div style={{ display: 'inline-flex', gap: '3px' }}>
@@ -1317,9 +1336,12 @@ export function ContentCalendar({
                       {/* Middle: Client + Concept */}
                       <div style={{ flex: 1, padding: '0 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827' }}>
-                            {evt.clientName}
-                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                            <ClientLogo name={evt.clientName} logoUrl={clientMap.get(evt.deliverable.clientId)?.logoUrl} size={24} />
+                            <span style={{ fontSize: '13px', fontWeight: 700, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                              {evt.clientName}
+                            </span>
+                          </div>
                           {evt.deliverable.platform === 'both' || (evt.deliverable.instagramLink && evt.deliverable.tiktokLink) ? (
                             <div style={{ display: 'inline-flex', gap: '4px' }}>
                               <span
@@ -1479,8 +1501,11 @@ export function ContentCalendar({
                   {selectedEvent.type === 'filming' ? <Video size={11} /> : <Send size={11} />}
                   {selectedEvent.type === 'filming' ? 'Filming Shoot' : 'Post Publication'}
                 </span>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginTop: '6px' }}>
-                  {selectedEvent.clientName}
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#111827', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
+                  <ClientLogo name={selectedEvent.clientName} logoUrl={clientMap.get(selectedEvent.deliverable.clientId)?.logoUrl} size={24} />
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                    {selectedEvent.clientName}
+                  </span>
                 </h3>
               </div>
 

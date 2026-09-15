@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, UserSummary } from '@/types';
@@ -31,6 +31,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
   const isAdmin = user?.role === 'admin';
 
   const [clients, setClients] = useState<ClientData[]>(initialClients);
+  useEffect(() => setClients(initialClients), [initialClients]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [assignedFilter, setAssignedFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -56,7 +57,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
   });
 
   // Filter clients
-  const filteredClients = clients.filter((c) => {
+  const filteredClients = useMemo(() => clients.filter((c) => {
     if (statusFilter !== 'all' && c.status !== statusFilter) return false;
     if (assignedFilter !== 'all') {
       const isAssigned = c.assignments?.some((a) => a.userId === assignedFilter);
@@ -70,7 +71,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
       if (!matchName && !matchLocation && !matchServices) return false;
     }
     return true;
-  });
+  }), [clients, statusFilter, assignedFilter, searchQuery]);
 
   // CSV Export
   const handleExportCSV = () => {
@@ -336,6 +337,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                 {isAdmin && <th style={{ minWidth: '100px' }}>Monthly Fee</th>}
                 <th style={{ minWidth: '80px' }}>Together</th>
                 <th>Contracted Services</th>
+                <th style={{ minWidth: '130px' }}>Monthly Delivery Pace</th>
                 <th>Lead & Team</th>
                 <th>Content Pacing</th>
                 <th style={{ textAlign: 'right', paddingRight: '18px' }}>Manage</th>
@@ -344,7 +346,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
             <tbody>
               {filteredClients.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+                  <td colSpan={isAdmin ? 10 : 9} style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
                     No client accounts match the current filter.
                   </td>
                 </tr>
@@ -370,6 +372,10 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                             <img
                               src={getProxiedImageUrl(client.logoUrl)}
                               alt={client.name}
+                              width={34}
+                              height={34}
+                              loading="lazy"
+                              decoding="async"
                               referrerPolicy="no-referrer"
                               style={{
                                 width: 34,
@@ -534,6 +540,76 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Monthly Delivery Pace */}
+                      <td>
+                        {(() => {
+                          const pace = client.monthlyPace;
+                          if (!pace || !pace.hasGoals || pace.target === 0) {
+                            return (
+                              <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                                —
+                              </span>
+                            );
+                          }
+
+                          const pct = Math.min(100, Math.max(0, pace.percent));
+                          const isComplete = pace.delivered >= pace.target;
+                          const barColor = isComplete
+                            ? 'linear-gradient(90deg, #10b981, #059669)'
+                            : pct >= 60
+                            ? 'linear-gradient(90deg, #6366f1, #4f46e5)'
+                            : 'linear-gradient(90deg, #f59e0b, #d97706)';
+                          const badgeColor = isComplete ? '#059669' : pct >= 60 ? '#4f46e5' : '#d97706';
+
+                          return (
+                            <div style={{ minWidth: '120px', maxWidth: '160px' }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  marginBottom: '4px',
+                                  fontSize: '11px',
+                                }}
+                              >
+                                <span style={{ color: '#4b5563', fontWeight: 600 }}>
+                                  {pace.delivered}/{pace.target}
+                                </span>
+                                <span style={{ fontWeight: 700, color: badgeColor, fontSize: '11px' }}>
+                                  {pace.percent}%
+                                </span>
+                              </div>
+                              <div
+                                role="progressbar"
+                                aria-label={`${client.name} monthly delivery pace`}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={pct}
+                                aria-valuetext={`${pace.delivered} of ${pace.target} items published`}
+                                style={{
+                                  height: '6px',
+                                  width: '100%',
+                                  backgroundColor: '#f1f5f9',
+                                  borderRadius: '999px',
+                                  overflow: 'hidden',
+                                  border: '1px solid #e2e8f0',
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    height: '100%',
+                                    width: `${pct}%`,
+                                    background: barColor,
+                                    borderRadius: '999px',
+                                    transition: 'width 0.4s ease',
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Assigned Team */}
