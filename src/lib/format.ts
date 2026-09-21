@@ -38,7 +38,7 @@ export function formatCompactMoney(value: number | string | null | undefined): s
   if (abs >= 1_000_000) {
     const v = abs / 1_000_000;
     const formatted = (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, '')).replace('.', ',');
-    return `${sign}${formatted} M DT`;
+    return `${sign}${formatted} million DT`;
   }
   if (abs >= 1_000) {
     const v = abs / 1_000;
@@ -47,6 +47,37 @@ export function formatCompactMoney(value: number | string | null | undefined): s
   }
 
   return `${sign}${Math.round(abs)} DT`;
+}
+
+/**
+ * Compact number formatting for views, impressions, followers (e.g. 500, 15k, 1 million, 2 million).
+ * When it passes 1 million, it displays "1 million", "2 million", "1.5 million", etc.
+ */
+export function formatCompactNumber(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '—';
+
+  const abs = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+
+  if (abs >= 1_000_000_000) {
+    const v = abs / 1_000_000_000;
+    const formatted = v % 1 === 0 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, '');
+    return `${sign}${formatted} billion`;
+  }
+  if (abs >= 1_000_000) {
+    const v = abs / 1_000_000;
+    const formatted = v % 1 === 0 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, '');
+    return `${sign}${formatted} million`;
+  }
+  if (abs >= 1_000) {
+    const v = abs / 1_000;
+    const formatted = v % 1 === 0 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, '');
+    return `${sign}${formatted}k`;
+  }
+
+  return `${sign}${Math.round(abs)}`;
 }
 
 export function formatNumber(value: number | string | null | undefined): string {

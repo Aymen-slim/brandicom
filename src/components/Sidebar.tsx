@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { createBrowserSupabaseClient } from '@/lib/supabase/client';
 import { UserSummary, ClientData } from '@/types';
-import { formatCompactMoney } from '@/lib/format';
+import { formatCompactMoney, formatCompactNumber } from '@/lib/format';
 import {
   Search,
   Sparkles,
@@ -233,7 +233,9 @@ export function Sidebar({ user, topClients = [], isOpen = false, onClose }: Side
                         suppressHydrationWarning
                         className="client-fee-badge"
                       >
-                        {formatCompactMoney(acc.monthlyFee)}
+                        {acc.monthlyFee >= 1_000_000
+                          ? formatCompactNumber(acc.monthlyFee)
+                          : formatCompactMoney(acc.monthlyFee)}
                       </span>
                     )}
                   </Link>

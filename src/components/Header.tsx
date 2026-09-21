@@ -8,6 +8,7 @@ import { Compass, TrendingUp, Menu, Search, Sparkles } from 'lucide-react';
 import { PeriodPicker } from './PeriodPicker';
 import { AdminPostingNotifier } from './AdminPostingNotifier';
 import { UserSummary } from '@/types';
+import { formatCompactNumber } from '@/lib/format';
 
 interface HeaderProps {
   title?: string;
@@ -15,9 +16,10 @@ interface HeaderProps {
   user?: UserSummary | null;
   children?: React.ReactNode;
   onToggleNav?: () => void;
+  monthlyViews?: number;
 }
 
-export function Header({ title, subtitle, user, children, onToggleNav }: HeaderProps) {
+export function Header({ title, subtitle, user, children, onToggleNav, monthlyViews }: HeaderProps) {
   const pathname = usePathname();
   const isDashboard = pathname === '/dashboard';
 
@@ -68,6 +70,30 @@ export function Header({ title, subtitle, user, children, onToggleNav }: HeaderP
                 <TrendingUp size={14} />
                 <span>Deliverables & Roster</span>
               </Link>
+
+              {monthlyViews != null && (
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '3px 10px',
+                    borderRadius: 9999,
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    color: '#059669',
+                    letterSpacing: '-0.01em',
+                  }}
+                  title={`Total views this period: ${monthlyViews.toLocaleString()}`}
+                >
+                  <span>
+                    {monthlyViews >= 1_000_000
+                      ? `${formatCompactNumber(monthlyViews)} views`
+                      : `${monthlyViews.toLocaleString()} views`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Mobile Header Title */}

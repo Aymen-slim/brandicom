@@ -14,6 +14,7 @@ export function AppShell({
   topClients,
   children,
   actions,
+  monthlyViews,
 }: {
   user: UserSummary;
   title?: string;
@@ -21,6 +22,7 @@ export function AppShell({
   topClients?: Array<{ id: string; name: string; monthlyFee?: number | null }>;
   children: React.ReactNode;
   actions?: React.ReactNode;
+  monthlyViews?: number;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pathname = usePathname();
@@ -43,6 +45,7 @@ export function AppShell({
           title={title}
           subtitle={subtitle}
           user={user}
+          monthlyViews={monthlyViews}
           onToggleNav={() => setMobileNavOpen((prev) => !prev)}
         >
           {actions}

@@ -470,6 +470,12 @@ select.input-field {
 }
 
 /* Responsive Grid Utilities */
+.grid-responsive-5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
 .grid-responsive-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1023,6 +1029,7 @@ select.input-field {
 
 /* Tablet Breakpoints */
 @media (max-width: 1024px) {
+  .grid-responsive-5,
   .grid-responsive-4 {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1352,6 +1359,7 @@ select.input-field {
     border-radius: 9px;
   }
 
+  .grid-responsive-5,
   .grid-responsive-4,
   .grid-responsive-3,
   .grid-responsive-2,

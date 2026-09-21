@@ -97,7 +97,7 @@ async function computeSnapshotDirectly(
       : Promise.resolve({ data: [] }),
     supabase
       .from('deliverables')
-      .select('id, published, publish_date, post_metrics(views)')
+      .select('id, published, publish_date, post_metrics(views, captured_at)')
       .eq('published', true)
       .gte('publish_date', startDateStr)
       .lte('publish_date', endDateStr),
@@ -137,9 +137,11 @@ async function computeSnapshotDirectly(
   let viewsActual = 0;
   for (const d of deliverablesRes.data || []) {
     const metrics = (d as any).post_metrics || [];
-    for (const pm of metrics) {
-      viewsActual += Number(pm.views || 0);
-    }
+    if (!metrics.length) continue;
+    const latest = [...metrics].sort(
+      (a, b) => new Date(b.captured_at).getTime() - new Date(a.captured_at).getTime()
+    )[0];
+    viewsActual += Number(latest?.views || 0);
   }
 
   const pipeline: Record<string, number> = { potential: 0, starting: 0, active: 0, paused: 0, churned: 0 };

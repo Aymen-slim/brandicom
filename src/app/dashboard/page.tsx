@@ -10,7 +10,7 @@ import { GaugeCard } from '@/components/GaugeCard';
 import { StageBarChart } from '@/components/StageBarChart';
 import { StatusBadge } from '@/components/StatusBadge';
 import { currentMonth, normalizePeriod, periodLabel } from '@/lib/period';
-import { formatMoney } from '@/lib/format';
+import { formatMoney, formatCompactNumber } from '@/lib/format';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import FinanceTrend from '@/components/FinanceTrend';
 
@@ -50,8 +50,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       title="Cockpit"
       subtitle={`${periodLabel(period)} • ${user.role === 'admin' ? 'Agency-wide' : 'Your accounts'}`}
       topClients={sidebarClients}
+      monthlyViews={metrics.views.actual}
     >
-      <div className="grid-responsive-4" style={{ marginBottom: 18 }}>
+      <div className={user.role === 'admin' ? 'grid-responsive-5' : 'grid-responsive-4'} style={{ marginBottom: 18 }}>
         {user.role === 'admin' && metrics.revenue ? (
           <GoalProgressCard title="Revenue received" actual={metrics.revenue.actual} target={metrics.revenue.target} isCurrency />
         ) : (
@@ -63,11 +64,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           target={metrics.deliverables.target}
           unit="posts"
         />
+        <GoalProgressCard title="Total views" actual={metrics.views.actual} target={metrics.views.target} />
         {user.role === 'admin' && metrics.profit ? (
           <GoalProgressCard title="Profit" actual={metrics.profit.actual} target={metrics.profit.target} isCurrency />
-        ) : (
-          <GoalProgressCard title="Views" actual={metrics.views.actual} target={metrics.views.target} />
-        )}
+        ) : null}
         <GoalProgressCard title="Retention" actual={metrics.retention.actual} target={metrics.retention.target} unit="%" />
       </div>
 
@@ -98,8 +98,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         ) : (
           <div className="glass-card" style={{ padding: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>Views this period</div>
-            <div style={{ fontSize: 28, fontWeight: 800, marginTop: 12 }}>{metrics.views.actual.toLocaleString()}</div>
-            <div style={{ fontSize: 12, color: '#6b7280' }}>Target {metrics.views.target.toLocaleString()}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, marginTop: 12 }}>
+              {metrics.views.actual >= 1_000_000 ? formatCompactNumber(metrics.views.actual) : metrics.views.actual.toLocaleString()}
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>
+              Target {metrics.views.target >= 1_000_000 ? formatCompactNumber(metrics.views.target) : metrics.views.target.toLocaleString()}
+            </div>
           </div>
         )}
       </div>

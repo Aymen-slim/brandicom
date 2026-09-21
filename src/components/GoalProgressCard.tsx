@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
-import { formatMoney, formatNumber } from '@/lib/format';
+import { formatMoney, formatNumber, formatCompactNumber } from '@/lib/format';
 
 interface GoalProgressCardProps {
   title: string;
@@ -29,6 +29,9 @@ export function GoalProgressCard({
 
   const formatValue = (val: number) => {
     if (isCurrency) return formatMoney(val);
+    if (val >= 1_000_000) {
+      return `${formatCompactNumber(val)}${unit ? ' ' + unit : ''}`;
+    }
     return `${formatNumber(val)}${unit ? ' ' + unit : ''}`;
   };
 
