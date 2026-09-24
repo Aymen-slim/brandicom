@@ -10,8 +10,9 @@ const PROTECTED_PREFIXES = [
   '/settings',
   '/finance',
   '/leads',
+  '/blog',
 ];
-const ADMIN_PREFIXES = ['/finance', '/leads'];
+const ADMIN_PREFIXES = ['/finance', '/leads', '/blog'];
 
 export async function middleware(request: NextRequest) {
   // Handle OPTIONS preflight requests cleanly

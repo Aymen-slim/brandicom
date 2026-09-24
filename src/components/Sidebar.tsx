@@ -20,6 +20,7 @@ import {
   UserCheck,
   Wallet,
   Inbox,
+  Newspaper,
   X,
 } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export function Sidebar({ user, topClients = [], isOpen = false, onClose }: Side
     ...(isAdminUser
       ? [
           { label: 'Website leads', href: '/leads', icon: Inbox },
+          { label: 'Blog', href: '/blog', icon: Newspaper },
           { label: 'Finance', href: '/finance', icon: Wallet },
         ]
       : []),
