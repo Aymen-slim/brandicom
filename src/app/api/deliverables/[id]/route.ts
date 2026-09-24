@@ -13,7 +13,7 @@ import {
   getDeliverableSelect,
   logActivity,
 } from '@/lib/data';
-import { serializeDeliverableLinks } from '@/lib/deliverables';
+import { maybeApplyResultsTaggedFormatForUpdate, serializeDeliverableLinks } from '@/lib/deliverables';
 
 export async function PATCH(
   request: NextRequest,
@@ -185,24 +185,16 @@ export async function PATCH(
         delete dataToUpdate.filming_date;
         retryNeeded = true;
       }
-      if (
-        dataToUpdate.format === 'ad' &&
-        (updateRes.error.code === '22P02' ||
-          updateRes.error.message?.includes('deliverable_format'))
-      ) {
-        dataToUpdate.format = null;
-        let currentResults = dataToUpdate.results;
-        if (currentResults === undefined) {
-          const { data: curDeliv } = await supabase
-            .from('deliverables')
-            .select('results')
-            .eq('id', deliverableId)
-            .single();
-          currentResults = curDeliv?.results || null;
-        }
-        dataToUpdate.results = currentResults
-          ? `${currentResults} [format:ad]`
-          : '[format:ad]';
+      const loadExistingResults = async () => {
+        const { data: curDeliv } = await supabase
+          .from('deliverables')
+          .select('results')
+          .eq('id', deliverableId)
+          .single();
+        return curDeliv?.results || null;
+      };
+
+      if (await maybeApplyResultsTaggedFormatForUpdate(dataToUpdate, updateRes.error, loadExistingResults)) {
         retryNeeded = true;
       }
 
@@ -216,23 +208,8 @@ export async function PATCH(
 
         if (
           updateRes.error &&
-          dataToUpdate.format === 'ad' &&
-          (updateRes.error.code === '22P02' ||
-            updateRes.error.message?.includes('deliverable_format'))
+          (await maybeApplyResultsTaggedFormatForUpdate(dataToUpdate, updateRes.error, loadExistingResults))
         ) {
-          dataToUpdate.format = null;
-          let currentResults = dataToUpdate.results;
-          if (currentResults === undefined) {
-            const { data: curDeliv } = await supabase
-              .from('deliverables')
-              .select('results')
-              .eq('id', deliverableId)
-              .single();
-            currentResults = curDeliv?.results || null;
-          }
-          dataToUpdate.results = currentResults
-            ? `${currentResults} [format:ad]`
-            : '[format:ad]';
           updateRes = await supabase
             .from('deliverables')
             .update(dataToUpdate)

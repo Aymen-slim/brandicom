@@ -14,7 +14,7 @@ import {
   getDeliverableSelect,
   logActivity,
 } from '@/lib/data';
-import { serializeDeliverableLinks } from '@/lib/deliverables';
+import { maybeApplyResultsTaggedFormat, serializeDeliverableLinks } from '@/lib/deliverables';
 
 export async function GET(
   _request: NextRequest,
@@ -166,15 +166,7 @@ export async function POST(
         delete insertPayload.filming_date;
         retryNeeded = true;
       }
-      if (
-        insertPayload.format === 'ad' &&
-        (insertRes.error.code === '22P02' ||
-          insertRes.error.message?.includes('deliverable_format'))
-      ) {
-        insertPayload.format = null;
-        insertPayload.results = insertPayload.results
-          ? `${insertPayload.results} [format:ad]`
-          : '[format:ad]';
+      if (maybeApplyResultsTaggedFormat(insertPayload, insertRes.error)) {
         retryNeeded = true;
       }
 
@@ -185,16 +177,7 @@ export async function POST(
           .select('id')
           .single();
 
-        if (
-          insertRes.error &&
-          insertPayload.format === 'ad' &&
-          (insertRes.error.code === '22P02' ||
-            insertRes.error.message?.includes('deliverable_format'))
-        ) {
-          insertPayload.format = null;
-          insertPayload.results = insertPayload.results
-            ? `${insertPayload.results} [format:ad]`
-            : '[format:ad]';
+        if (insertRes.error && maybeApplyResultsTaggedFormat(insertPayload, insertRes.error)) {
           insertRes = await supabase
             .from('deliverables')
             .insert(insertPayload)

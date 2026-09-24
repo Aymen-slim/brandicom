@@ -39,7 +39,7 @@ export const CREATOR_ROLES: CreatorRole[] = [
   'designer',
   'model',
 ];
-export const DELIVERABLE_FORMATS: DeliverableFormat[] = ['reel', 'photo', 'story', 'carousel', 'ad'];
+export const DELIVERABLE_FORMATS: DeliverableFormat[] = ['reel', 'photo', 'story', 'carousel', 'ad', 'photoshoot'];
 export const PLATFORMS: Platform[] = ['instagram', 'tiktok', 'facebook', 'youtube', 'both'];
 export const DELIVERABLE_STATUSES: DeliverableStatus[] = [
   'idea',
@@ -331,9 +331,14 @@ export function mapDeliverableRow(row: any): DeliverableData {
   let results: string | null = row.results ?? null;
   if ((format as any) === 'ads') {
     format = 'ad';
-  } else if (!format && results && results.includes('[format:ad]')) {
-    format = 'ad';
-    results = results.replace(/\[format:ad\]\s*/g, '').trim() || null;
+  } else if (!format && results) {
+    if (results.includes('[format:ad]')) {
+      format = 'ad';
+      results = results.replace(/\[format:ad\]\s*/g, '').trim() || null;
+    } else if (results.includes('[format:photoshoot]')) {
+      format = 'photoshoot';
+      results = results.replace(/\[format:photoshoot\]\s*/g, '').trim() || null;
+    }
   }
 
   let publishTime: string | null = row.publish_time ?? null;

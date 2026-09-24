@@ -229,9 +229,21 @@ export function computeClientGoalsProgress(
   const otherCounts = countFor((d) => {
     const f = d.format;
     if (isOtherAds) {
-      return f === 'ad' || (f as any) === 'ads' || (f !== 'reel' && f !== 'photo' && f !== 'carousel' && f !== 'story');
+      return (
+        f === 'ad' ||
+        (f as any) === 'ads' ||
+        (f !== 'reel' && f !== 'photo' && f !== 'carousel' && f !== 'story' && f !== 'photoshoot')
+      );
     }
-    return f !== 'reel' && f !== 'photo' && f !== 'carousel' && f !== 'story' && f !== 'ad' && (f as any) !== 'ads';
+    return (
+      f !== 'reel' &&
+      f !== 'photo' &&
+      f !== 'carousel' &&
+      f !== 'story' &&
+      f !== 'ad' &&
+      f !== 'photoshoot' &&
+      (f as any) !== 'ads'
+    );
   });
   const otherTarget = isOtherSelected ? goals.other || 0 : 0;
   const otherRemaining = Math.max(0, otherTarget - otherCounts.published);

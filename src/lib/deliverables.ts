@@ -187,3 +187,51 @@ export function serializeDeliverableLinks(input: {
   if (tt) return tt;
   return fallback;
 }
+
+/** Formats stored in results when the DB enum does not yet include the value. */
+export type ResultsTaggedFormat = 'ad' | 'photoshoot';
+
+export function isDeliverableFormatEnumError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return error.code === '22P02' || Boolean(error.message?.includes('deliverable_format'));
+}
+
+export function applyResultsTaggedFormat(
+  payload: Record<string, unknown>,
+  format: ResultsTaggedFormat,
+  existingResults?: string | null
+): void {
+  const tag = `[format:${format}]`;
+  payload.format = null;
+  const results =
+    payload.results !== undefined
+      ? payload.results
+      : existingResults !== undefined
+        ? existingResults
+        : null;
+  payload.results = typeof results === 'string' && results.trim() !== '' ? `${results} ${tag}` : tag;
+}
+
+export function maybeApplyResultsTaggedFormat(
+  payload: Record<string, unknown>,
+  error: { code?: string; message?: string } | null
+): boolean {
+  const fmt = payload.format;
+  if (fmt !== 'ad' && fmt !== 'photoshoot') return false;
+  if (!isDeliverableFormatEnumError(error)) return false;
+  applyResultsTaggedFormat(payload, fmt as ResultsTaggedFormat);
+  return true;
+}
+
+export async function maybeApplyResultsTaggedFormatForUpdate(
+  payload: Record<string, unknown>,
+  error: { code?: string; message?: string } | null,
+  loadExistingResults: () => Promise<string | null>
+): Promise<boolean> {
+  const fmt = payload.format;
+  if (fmt !== 'ad' && fmt !== 'photoshoot') return false;
+  if (!isDeliverableFormatEnumError(error)) return false;
+  const existingResults = payload.results === undefined ? await loadExistingResults() : undefined;
+  applyResultsTaggedFormat(payload, fmt as ResultsTaggedFormat, existingResults);
+  return true;
+}

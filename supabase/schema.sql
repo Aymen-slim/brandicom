@@ -28,6 +28,9 @@ do $$ begin
   create type public.deliverable_format as enum ('reel', 'photo', 'story', 'carousel');
 exception when duplicate_object then null; end $$;
 
+alter type public.deliverable_format add value if not exists 'ad';
+alter type public.deliverable_format add value if not exists 'photoshoot';
+
 do $$ begin
   create type public.platform as enum ('instagram', 'tiktok', 'facebook', 'youtube');
 exception when duplicate_object then null; end $$;

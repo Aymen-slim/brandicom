@@ -46,6 +46,44 @@ interface CalendarEvent {
   clientName: string;
 }
 
+type EventBadgeColors = { bg: string; text: string; border: string };
+
+function usesYellowCalendarStyle(format: DeliverableFormat | null | undefined): boolean {
+  return format === 'photoshoot';
+}
+
+function getCalendarEventColors(evt: CalendarEvent): EventBadgeColors {
+  const isFilming = evt.type === 'filming';
+
+  if (usesYellowCalendarStyle(evt.deliverable.format)) {
+    if (evt.isOverdue) {
+      return { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' };
+    }
+    if (evt.isCompleted) {
+      return { bg: '#fef9c3', text: '#a16207', border: '#fde047' };
+    }
+    return { bg: '#fef3c7', text: '#b45309', border: '#fde68a' };
+  }
+
+  if (isFilming) {
+    if (evt.isCompleted) {
+      return { bg: '#eff6ff', text: '#1d4ed8', border: '#bfdbfe' };
+    }
+    if (evt.isOverdue) {
+      return { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' };
+    }
+    return { bg: '#f5f3ff', text: '#4338ca', border: '#ddd6fe' };
+  }
+
+  if (evt.isCompleted) {
+    return { bg: '#ecfdf5', text: '#047857', border: '#a7f3d0' };
+  }
+  if (evt.isOverdue) {
+    return { bg: '#fff1f2', text: '#be123c', border: '#fecdd3' };
+  }
+  return { bg: '#f0fdf4', text: '#15803d', border: '#bbf7d0' };
+}
+
 function formatDateKey(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -965,41 +1003,7 @@ export function ContentCalendar({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
                     {dayEvents.map((evt, idx) => {
                       const isFilming = evt.type === 'filming';
-                      const badgeBg = isFilming
-                        ? evt.isCompleted
-                          ? '#eff6ff'
-                          : evt.isOverdue
-                          ? '#fff1f2'
-                          : '#f5f3ff'
-                        : evt.isCompleted
-                        ? '#ecfdf5'
-                        : evt.isOverdue
-                        ? '#fff1f2'
-                        : '#f0fdf4';
-
-                      const badgeText = isFilming
-                        ? evt.isCompleted
-                          ? '#1d4ed8'
-                          : evt.isOverdue
-                          ? '#be123c'
-                          : '#4338ca'
-                        : evt.isCompleted
-                        ? '#047857'
-                        : evt.isOverdue
-                        ? '#be123c'
-                        : '#15803d';
-
-                      const badgeBorder = isFilming
-                        ? evt.isCompleted
-                          ? '#bfdbfe'
-                          : evt.isOverdue
-                          ? '#fecdd3'
-                          : '#ddd6fe'
-                        : evt.isCompleted
-                        ? '#a7f3d0'
-                        : evt.isOverdue
-                        ? '#fecdd3'
-                        : '#bbf7d0';
+                      const { bg: badgeBg, text: badgeText, border: badgeBorder } = getCalendarEventColors(evt);
 
                       return (
                         <div
@@ -1181,15 +1185,17 @@ export function ContentCalendar({
                         No events
                       </div>
                     ) : (
-                      dayEvents.map((evt, idx) => (
+                      dayEvents.map((evt, idx) => {
+                        const weekColors = getCalendarEventColors(evt);
+                        return (
                         <div
                           key={`${evt.deliverable.id}-${evt.type}-${idx}`}
                           onClick={() => handleEventClick(evt)}
                           style={{
                             padding: '10px',
                             borderRadius: 'var(--radius-sm)',
-                            backgroundColor: evt.type === 'filming' ? '#f5f3ff' : '#f0fdf4',
-                            border: `1px solid ${evt.type === 'filming' ? '#ddd6fe' : '#bbf7d0'}`,
+                            backgroundColor: weekColors.bg,
+                            border: `1px solid ${weekColors.border}`,
                             cursor: 'pointer',
                             display: 'flex',
                             flexDirection: 'column',
@@ -1202,7 +1208,7 @@ export function ContentCalendar({
                                 fontSize: '10px',
                                 fontWeight: 800,
                                 textTransform: 'uppercase',
-                                color: evt.type === 'filming' ? '#4338ca' : '#15803d',
+                                color: weekColors.text,
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '3px',
@@ -1253,7 +1259,8 @@ export function ContentCalendar({
                             </div>
                           )}
                         </div>
-                      ))
+                      );
+                      })
                     )}
                   </div>
                 </div>
@@ -1278,6 +1285,7 @@ export function ContentCalendar({
                   const isFilming = evt.type === 'filming';
                   const isPastDate = evt.date < todayStr;
                   const isTodayDate = evt.date === todayStr;
+                  const agendaTypeColors = getCalendarEventColors(evt);
 
                   return (
                     <div
@@ -1320,8 +1328,9 @@ export function ContentCalendar({
                             fontSize: '11px',
                             fontWeight: 700,
                             textTransform: 'uppercase',
-                            backgroundColor: isFilming ? '#e0e7ff' : '#d1fae5',
-                            color: isFilming ? '#3730a3' : '#065f46',
+                            backgroundColor: agendaTypeColors.bg,
+                            color: agendaTypeColors.text,
+                            border: `1px solid ${agendaTypeColors.border}`,
                           }}
                         >
                           {isFilming ? <Video size={11} /> : <Send size={11} />}
@@ -1562,6 +1571,7 @@ export function ContentCalendar({
                     <option value="carousel">Carousel (10 slides)</option>
                     <option value="story">Story Sequence</option>
                     <option value="ad">Paid Ad / Sponsor</option>
+                    <option value="photoshoot">Photoshoot</option>
                   </select>
                 </div>
               </div>
@@ -1863,6 +1873,7 @@ export function ContentCalendar({
                     <option value="carousel">Carousel (10 slides)</option>
                     <option value="story">Story Sequence</option>
                     <option value="ad">Paid Ad / Sponsor</option>
+                    <option value="photoshoot">Photoshoot</option>
                   </select>
                 </div>
               </div>

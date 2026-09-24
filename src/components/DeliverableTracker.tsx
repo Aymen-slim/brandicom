@@ -957,6 +957,7 @@ export function DeliverableTracker({
                 <option value="story">Story</option>
                 <option value="carousel">Carousel</option>
                 <option value="ad">Paid Ad / Sponsor</option>
+                <option value="photoshoot">Photoshoot</option>
               </select>
             </div>
 
@@ -1864,14 +1865,20 @@ export function DeliverableTracker({
                               padding: '1.5px 7px',
                               borderRadius: '4px',
                               fontSize: '11px',
-                              backgroundColor: d.format === 'ad' ? '#fef3c7' : '#f3f4f6',
-                              color: d.format === 'ad' ? '#b45309' : '#6b7280',
-                              fontWeight: d.format === 'ad' ? 700 : 500,
+                              backgroundColor:
+                                d.format === 'ad' || d.format === 'photoshoot' ? '#fef3c7' : '#f3f4f6',
+                              color: d.format === 'ad' || d.format === 'photoshoot' ? '#b45309' : '#6b7280',
+                              fontWeight: d.format === 'ad' || d.format === 'photoshoot' ? 700 : 500,
                               textTransform: 'capitalize',
-                              border: d.format === 'ad' ? '1px solid #fde68a' : undefined,
+                              border:
+                                d.format === 'ad' || d.format === 'photoshoot' ? '1px solid #fde68a' : undefined,
                             }}
                           >
-                            {d.format === 'ad' ? 'Paid Ad' : d.format}
+                            {d.format === 'ad'
+                              ? 'Paid Ad'
+                              : d.format === 'photoshoot'
+                              ? 'Photoshoot'
+                              : d.format}
                           </span>
                         )}
                       </div>
@@ -2087,6 +2094,7 @@ export function DeliverableTracker({
                     <option value="carousel">Carousel</option>
                     <option value="story">Story</option>
                     <option value="ad">Paid Ad / Sponsor</option>
+                    <option value="photoshoot">Photoshoot</option>
                   </select>
                 </div>
               </div>

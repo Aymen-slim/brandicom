@@ -10,7 +10,7 @@ export type CreatorRole =
   | 'editor'
   | 'designer'
   | 'model';
-export type DeliverableFormat = 'reel' | 'photo' | 'story' | 'carousel' | 'ad';
+export type DeliverableFormat = 'reel' | 'photo' | 'story' | 'carousel' | 'ad' | 'photoshoot';
 export type Platform = 'instagram' | 'tiktok' | 'facebook' | 'youtube' | 'both';
 export type DeliverableStatus = 'idea' | 'scripted' | 'filmed' | 'editing' | 'scheduled' | 'published';
 export type PartnerType = 'individual' | 'agency';
