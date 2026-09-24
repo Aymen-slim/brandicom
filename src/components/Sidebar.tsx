@@ -19,6 +19,7 @@ import {
   Shield,
   UserCheck,
   Wallet,
+  Inbox,
   X,
 } from 'lucide-react';
 
@@ -51,7 +52,12 @@ export function Sidebar({ user, topClients = [], isOpen = false, onClose }: Side
     { label: 'Clients & Accounts', href: '/clients', icon: Users },
     { label: 'Calendar', href: '/calendar', icon: Calendar },
     { label: 'Partners', href: '/partners', icon: Film },
-    ...(isAdminUser ? [{ label: 'Finance', href: '/finance', icon: Wallet }] : []),
+    ...(isAdminUser
+      ? [
+          { label: 'Website leads', href: '/leads', icon: Inbox },
+          { label: 'Finance', href: '/finance', icon: Wallet },
+        ]
+      : []),
     { label: 'Settings & Team', href: '/settings', icon: Settings },
   ];
 
