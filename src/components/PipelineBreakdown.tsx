@@ -13,9 +13,8 @@ export function PipelineBreakdown({ breakdown, totalClients }: PipelineBreakdown
   const statuses: Array<{ key: ClientStatus; label: string; color: string }> = [
     { key: 'active', label: 'Active', color: '#10b981' },
     { key: 'starting', label: 'Starting', color: '#0ea5e9' },
-    { key: 'potential', label: 'Potential', color: '#8b5cf6' },
+    { key: 'one_time', label: 'One Time Work', color: '#8b5cf6' },
     { key: 'paused', label: 'Paused', color: '#f59e0b' },
-    { key: 'churned', label: 'Churned', color: '#f43f5e' },
   ];
 
   return (
@@ -43,7 +42,6 @@ export function PipelineBreakdown({ breakdown, totalClients }: PipelineBreakdown
         </div>
       </div>
 
-      {/* Segmented Distribution Bar */}
       <div
         style={{
           width: '100%',
@@ -73,7 +71,6 @@ export function PipelineBreakdown({ breakdown, totalClients }: PipelineBreakdown
         })}
       </div>
 
-      {/* Grid of status counters */}
       <div
         style={{
           display: 'grid',

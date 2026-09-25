@@ -12,7 +12,6 @@ import {
   ClientData,
   ClientHealthData,
   ClientOption,
-  ClientStatus,
   CreatorData,
   CreatorOption,
   CreatorRole,
@@ -26,8 +25,9 @@ import {
   SocialAccountData,
   UserSummary,
 } from '@/types';
+import { isClientStatus, normalizeClientStatus, sortClientsForDisplay } from './clientStatus';
 
-export const CLIENT_STATUSES: ClientStatus[] = ['potential', 'starting', 'active', 'paused', 'churned'];
+export { CLIENT_STATUSES, isClientStatus } from './clientStatus';
 export const CREATOR_ROLES: CreatorRole[] = [
   'photographer',
   'ugc',
@@ -72,7 +72,6 @@ async function readAllRows<T>(
   return rows;
 }
 
-export const isClientStatus = (v: unknown): v is ClientStatus => CLIENT_STATUSES.includes(v as ClientStatus);
 export const isCreatorRole = (v: unknown): v is CreatorRole => CREATOR_ROLES.includes(v as CreatorRole);
 export const isDeliverableFormat = (v: unknown): v is DeliverableFormat =>
   DELIVERABLE_FORMATS.includes(v as DeliverableFormat) || v === 'ads';
@@ -254,7 +253,7 @@ export function mapClientRow(row: any, opts?: { contract?: ClientContractData | 
       tags: row.tags || [],
       assetsUrl: row.assets_url,
       logoUrl: row.logo_url,
-      status: row.status as ClientStatus,
+      status: normalizeClientStatus(row.status),
       services: row.services || [],
       notes: row.notes,
       createdAt: row.created_at,
@@ -504,7 +503,11 @@ export async function fetchClients(opts: {
   userId?: string;
 }): Promise<ClientData[]> {
   const supabase = createServerSupabaseClient();
-  let query = supabase.from('clients').select(CLIENT_SELECT);
+  const select =
+    opts.userRole === 'admin'
+      ? `${CLIENT_SELECT}, client_contracts(client_id, contract_type, monthly_fee, currency, billing_day, start_date, end_date, notes)`
+      : CLIENT_SELECT;
+  let query: any = supabase.from('clients').select(select);
 
   if (opts.status && isClientStatus(opts.status)) {
     query = query.eq('status', opts.status);
@@ -524,21 +527,13 @@ export async function fetchClients(opts: {
   const { data, error } = await query.order('created_at', { ascending: false });
   if (error) throw error;
 
-  const clients = (data || []).map((row) => mapClientRow(row));
+  const clients = (data || []).map((row: any) => {
+    const rawContracts = row.client_contracts;
+    const contractRow = Array.isArray(rawContracts) ? rawContracts[0] : rawContracts;
+    return mapClientRow(row, { contract: contractRow ? mapContract(contractRow) : null });
+  });
 
-  if (opts.userRole === 'admin' && clients.length > 0) {
-    const { data: contracts } = await supabase
-      .from('client_contracts')
-      .select('client_id, contract_type, monthly_fee, currency, billing_day, start_date, end_date, notes')
-      .in(
-        'client_id',
-        clients.map((c) => c.id)
-      );
-    const byId = new Map((contracts || []).map((c: any) => [c.client_id, mapContract(c)]));
-    return clients.map((c) => ({ ...c, contract: byId.get(c.id) ?? null }));
-  }
-
-  return clients;
+  return sortClientsForDisplay(clients);
 }
 
 export async function attachClientCounts(clients: ClientData[]): Promise<ClientData[]> {
@@ -622,7 +617,7 @@ export async function loadClientListStats(
     const counts = countsByClient.get(client.id);
     const pace = computeClientGoalsProgress(client, rowsByClient.get(client.id) || [], period);
 
-    return {
+    return slimClientForList({
       ...client,
       monthlyPace: {
         delivered: pace.totalPublished,
@@ -634,23 +629,34 @@ export async function loadClientListStats(
         deliverables: counts?.deliverables?.[0]?.count ?? 0,
         messages: counts?.messages?.[0]?.count ?? 0,
       },
-    };
+    });
   });
+}
+
+function slimClientForList(client: ClientData): ClientData {
+  return {
+    ...client,
+    notes: null,
+    inspirations: [],
+    followerHistory: [],
+    tags: (client.tags || []).filter(
+      (tag) => typeof tag === 'string' && !tag.startsWith('inspo:') && !tag.startsWith('f_month:')
+    ),
+  };
 }
 
 export async function fetchClientDetail(clientId: string, user?: CurrentUser | null) {
   const supabase = createServerSupabaseClient();
 
-  const { data: clientRow, error: clientError } = await supabase
-    .from('clients')
-    .select(CLIENT_SELECT)
-    .eq('id', clientId)
-    .maybeSingle();
+  const [clientRes, supportsFilmingDate] = await Promise.all([
+    supabase.from('clients').select(CLIENT_SELECT).eq('id', clientId).maybeSingle(),
+    isFilmingDateSupported(supabase),
+  ]);
+  const { data: clientRow, error: clientError } = clientRes;
 
   if (clientError) throw clientError;
   if (!clientRow) return null;
 
-  const supportsFilmingDate = await isFilmingDateSupported(supabase);
   const delivSelect = getDeliverableSelect(supportsFilmingDate);
 
   const [deliverablesRes, creatorAssignmentsRes, messagesRes, healthRes, contractRes] = await Promise.all([
@@ -822,6 +828,11 @@ export async function fetchCalendarDeliverables(opts?: {
   return loadCalendarDeliverables(supabase, opts || {}, supportsFilmingDate);
 }
 
+const ALERT_SELECT =
+  'id, client_id, idea, title, format, platform, published, filmed, status, publish_date, publish_time, filming_date, clients(id, name)';
+const ALERT_SELECT_BASE =
+  'id, client_id, idea, title, format, platform, published, filmed, status, publish_date, clients(id, name)';
+
 export async function fetchAdminPostingAlerts(): Promise<{
   todayPosts: DeliverableData[];
   overduePosts: DeliverableData[];
@@ -830,42 +841,46 @@ export async function fetchAdminPostingAlerts(): Promise<{
 }> {
   const supabase = createServerSupabaseClient();
   const today = new Date().toISOString().split('T')[0];
-  const supportsFilmingDate = await isFilmingDateSupported(supabase);
-  const delivSelect = getCalendarDeliverableSelect(supportsFilmingDate, true);
 
-  const buildPage = (selectStr: string, from: number, to: number) =>
-    supabase
-      .from('deliverables')
-      .select(selectStr, { count: from === 0 ? 'exact' : undefined })
-      .or('published.eq.false,filmed.eq.false')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true })
-      .range(from, to);
+  const load = async (selectStr: string, includeShoots: boolean) => {
+    const posts = supabase.from('deliverables').select(selectStr);
+    const [todayRes, overdueRes, upcomingRes, shootsRes] = await Promise.all([
+      posts.eq('published', false).eq('publish_date', today).order('publish_time', { ascending: true }).limit(40),
+      supabase
+        .from('deliverables')
+        .select(selectStr)
+        .eq('published', false)
+        .lt('publish_date', today)
+        .order('publish_date', { ascending: false })
+        .limit(40),
+      supabase
+        .from('deliverables')
+        .select(selectStr)
+        .eq('published', false)
+        .gt('publish_date', today)
+        .order('publish_date', { ascending: true })
+        .limit(5),
+      includeShoots
+        ? supabase.from('deliverables').select(selectStr).eq('filmed', false).eq('filming_date', today).limit(20)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    const failed = todayRes.error || overdueRes.error || upcomingRes.error || shootsRes.error;
+    if (failed) throw failed;
+    return {
+      todayPosts: (todayRes.data || [])
+        .map(mapDeliverableRow)
+        .sort((a, b) => (a.publishTime || '99:99').localeCompare(b.publishTime || '99:99')),
+      overduePosts: (overdueRes.data || []).map(mapDeliverableRow),
+      todayShoots: (shootsRes.data || []).map(mapDeliverableRow),
+      upcomingPosts: (upcomingRes.data || []).map(mapDeliverableRow),
+    };
+  };
 
-  let rows: any[];
   try {
-    rows = await readAllRows<any>((from, to) => buildPage(delivSelect, from, to));
+    return await load(ALERT_SELECT, true);
   } catch {
-    rows = await readAllRows<any>((from, to) => buildPage(CALENDAR_EVENT_SELECT_BASE, from, to));
+    return load(ALERT_SELECT_BASE, false);
   }
-  const all: DeliverableData[] = rows.map(mapDeliverableRow);
-
-  const todayPosts = all
-    .filter((d) => d.publishDate === today && !d.published)
-    .sort((a, b) => (a.publishTime || '99:99').localeCompare(b.publishTime || '99:99'));
-
-  const overduePosts = all
-    .filter((d) => Boolean(d.publishDate && d.publishDate < today && !d.published))
-    .sort((a, b) => (b.publishDate || '').localeCompare(a.publishDate || ''));
-
-  const todayShoots = all.filter((d) => d.filmingDate === today && !d.filmed);
-
-  const upcomingPosts = all
-    .filter((d) => Boolean(d.publishDate && d.publishDate > today && !d.published))
-    .sort((a, b) => (a.publishDate || '').localeCompare(b.publishDate || ''))
-    .slice(0, 5);
-
-  return { todayPosts, overduePosts, todayShoots, upcomingPosts };
 }
 
 export async function fetchMessages(clientId: string, since?: string | null): Promise<MessageData[]> {
@@ -1050,7 +1065,7 @@ export async function createClient(
     .insert({
       name: payload.name,
       location: payload.location?.trim() || null,
-      status: payload.status && isClientStatus(payload.status) ? payload.status : 'potential',
+      status: payload.status && isClientStatus(payload.status) ? payload.status : 'starting',
       services: payload.services,
       notes: payload.notes?.trim() || null,
       industry: payload.industry?.trim() || null,

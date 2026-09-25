@@ -11,14 +11,12 @@ interface StageBarChartProps {
 export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, totalClients = 0 }: StageBarChartProps) {
   const b = breakdown || {};
   const stages: Array<{ key: ClientStatus; label: string; count: number; relativeHeight: number }> = [
-    { key: 'potential', label: 'Potential', count: b.potential || 0, relativeHeight: 40 },
-    { key: 'starting', label: 'Starting', count: b.starting || 0, relativeHeight: 60 },
     { key: 'active', label: 'Active', count: b.active || 0, relativeHeight: 95 },
+    { key: 'starting', label: 'Starting', count: b.starting || 0, relativeHeight: 60 },
+    { key: 'one_time', label: 'One Time', count: b.one_time || 0, relativeHeight: 45 },
     { key: 'paused', label: 'Paused', count: b.paused || 0, relativeHeight: 35 },
-    { key: 'churned', label: 'Churned', count: b.churned || 0, relativeHeight: 25 },
   ];
 
-  // Max count to scale bar heights
   const maxCount = Math.max(...stages.map((s) => s.count), 4);
 
   return (
@@ -31,7 +29,6 @@ export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, 
         height: '100%',
       }}
     >
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
         <div>
           <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -56,7 +53,6 @@ export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, 
         </span>
       </div>
 
-      {/* Bars container */}
       <div
         style={{
           display: 'flex',
@@ -70,7 +66,6 @@ export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, 
         }}
       >
         {stages.map((stage) => {
-          // Height percentage between 15% and 90%
           const pct = Math.max((stage.count / maxCount) * 85, 12);
 
           return (
@@ -85,7 +80,6 @@ export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, 
                 justifyContent: 'flex-end',
               }}
             >
-              {/* Count above bar */}
               <span
                 style={{
                   fontSize: '11px',
@@ -97,7 +91,6 @@ export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, 
                 {stage.count}
               </span>
 
-              {/* Bar column */}
               <div
                 style={{
                   width: '100%',
@@ -115,7 +108,6 @@ export function StageBarChart({ breakdown = {} as Record<ClientStatus, number>, 
         })}
       </div>
 
-      {/* Stage labels underneath */}
       <div
         style={{
           display: 'flex',

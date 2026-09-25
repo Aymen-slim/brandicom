@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, DeliverableData, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
 import { formatMoney, formatTenure, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput, getProxiedImageUrl } from '@/lib/format';
+import { clientStatusSelectStyle } from '@/lib/clientStatus';
 import { InstagramIcon, TikTokIcon } from './SocialIcons';
 import {
   MapPin,
@@ -542,35 +543,16 @@ export function ClientDetailHeader({
                 padding: '3px 10px',
                 borderRadius: '6px',
                 border: '1px solid #e2e8f0',
-                backgroundColor:
-                  client.status === 'active'
-                    ? '#ecfdf5'
-                    : client.status === 'starting'
-                    ? '#e0f2fe'
-                    : client.status === 'potential'
-                    ? '#f3e8ff'
-                    : client.status === 'paused'
-                    ? '#fffbeb'
-                    : '#ffe4e6',
-                color:
-                  client.status === 'active'
-                    ? '#047857'
-                    : client.status === 'starting'
-                    ? '#0284c7'
-                    : client.status === 'potential'
-                    ? '#7e22ce'
-                    : client.status === 'paused'
-                    ? '#b45309'
-                    : '#be123c',
+                backgroundColor: clientStatusSelectStyle(client.status).bg,
+                color: clientStatusSelectStyle(client.status).text,
                 cursor: 'pointer',
               }}
               title="Change Client Stage"
             >
-              <option value="potential">Potential</option>
-              <option value="starting">Starting</option>
               <option value="active">Active</option>
+              <option value="starting">Starting</option>
+              <option value="one_time">One Time Work</option>
               <option value="paused">Paused</option>
-              <option value="churned">Churned</option>
             </select>
             {client.health && (
               <span
@@ -1018,23 +1000,14 @@ export function ClientDetailHeader({
                     className="input-field"
                     style={{
                       fontWeight: 600,
-                      backgroundColor:
-                        status === 'active'
-                          ? '#ecfdf5'
-                          : status === 'starting'
-                          ? '#e0f2fe'
-                          : status === 'potential'
-                          ? '#f3e8ff'
-                          : status === 'paused'
-                          ? '#fffbeb'
-                          : '#ffe4e6',
+                      backgroundColor: clientStatusSelectStyle(status).bg,
+                      color: clientStatusSelectStyle(status).text,
                     }}
                   >
-                    <option value="potential">Potential (Lead / Proposal)</option>
-                    <option value="starting">Starting (Onboarding)</option>
                     <option value="active">Active (Ongoing Retainer)</option>
+                    <option value="starting">Starting (Onboarding)</option>
+                    <option value="one_time">One Time Work</option>
                     <option value="paused">Paused (On Hold)</option>
-                    <option value="churned">Churned (Inactive)</option>
                   </select>
                 </div>
               </div>

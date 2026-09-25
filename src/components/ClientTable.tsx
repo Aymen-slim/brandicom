@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
 import { formatMoney, formatTenure, formatNumber, getProxiedImageUrl } from '@/lib/format';
+import { clientStatusSelectStyle, sortClientsForDisplay } from '@/lib/clientStatus';
 import {
   Search,
   Plus,
@@ -42,7 +43,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
   const [formData, setFormData] = useState({
     name: '',
     location: '',
-    status: 'potential' as ClientStatus,
+    status: 'starting' as ClientStatus,
     monthlyFee: '',
     startDate: '',
     services: '',
@@ -57,21 +58,24 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
   });
 
   // Filter clients
-  const filteredClients = useMemo(() => clients.filter((c) => {
-    if (statusFilter !== 'all' && c.status !== statusFilter) return false;
-    if (assignedFilter !== 'all') {
-      const isAssigned = c.assignments?.some((a) => a.userId === assignedFilter);
-      if (!isAssigned) return false;
-    }
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchName = c.name.toLowerCase().includes(q);
-      const matchLocation = (c.location || '').toLowerCase().includes(q);
-      const matchServices = c.services.some((s) => s.toLowerCase().includes(q));
-      if (!matchName && !matchLocation && !matchServices) return false;
-    }
-    return true;
-  }), [clients, statusFilter, assignedFilter, searchQuery]);
+  const filteredClients = useMemo(() => {
+    const filtered = clients.filter((c) => {
+      if (statusFilter !== 'all' && c.status !== statusFilter) return false;
+      if (assignedFilter !== 'all') {
+        const isAssigned = c.assignments?.some((a) => a.userId === assignedFilter);
+        if (!isAssigned) return false;
+      }
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase();
+        const matchName = c.name.toLowerCase().includes(q);
+        const matchLocation = (c.location || '').toLowerCase().includes(q);
+        const matchServices = c.services.some((s) => s.toLowerCase().includes(q));
+        if (!matchName && !matchLocation && !matchServices) return false;
+      }
+      return true;
+    });
+    return sortClientsForDisplay(filtered);
+  }, [clients, statusFilter, assignedFilter, searchQuery]);
 
   // CSV Export
   const handleExportCSV = () => {
@@ -104,7 +108,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
   // Quick stage change directly from table
   const handleStageChange = async (clientId: string, newStatus: ClientStatus) => {
     setClients((prev) =>
-      prev.map((c) => (c.id === clientId ? { ...c, status: newStatus } : c))
+      sortClientsForDisplay(prev.map((c) => (c.id === clientId ? { ...c, status: newStatus } : c)))
     );
 
     try {
@@ -118,7 +122,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
       } else {
         const updated = await res.json();
         setClients((prev) =>
-          prev.map((c) => (c.id === clientId ? { ...c, ...updated } : c))
+          sortClientsForDisplay(prev.map((c) => (c.id === clientId ? { ...c, ...updated } : c)))
         );
       }
     } catch (err) {
@@ -201,12 +205,12 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
 
       if (res.ok) {
         const created = await res.json();
-        setClients((prev) => [created, ...prev]);
+        setClients((prev) => sortClientsForDisplay([created, ...prev]));
         setShowModal(false);
         setFormData({
           name: '',
           location: '',
-          status: 'potential',
+          status: 'starting',
           monthlyFee: '',
           startDate: '',
           services: '',
@@ -287,9 +291,8 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
             <option value="all">All Stages</option>
             <option value="active">Active</option>
             <option value="starting">Starting</option>
-            <option value="potential">Potential</option>
+            <option value="one_time">One Time Work</option>
             <option value="paused">Paused</option>
-            <option value="churned">Churned</option>
           </select>
 
           {/* Assigned filter (for admin) */}
@@ -372,10 +375,10 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                             <img
                               src={getProxiedImageUrl(client.logoUrl)}
                               alt={client.name}
-                              width={34}
-                              height={34}
                               loading="lazy"
                               decoding="async"
+                              width={34}
+                              height={34}
                               referrerPolicy="no-referrer"
                               style={{
                                 width: 34,
@@ -476,35 +479,16 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                             padding: '3px 8px',
                             borderRadius: '5px',
                             border: '1px solid #e2e8f0',
-                            backgroundColor:
-                              client.status === 'active'
-                                ? '#ecfdf5'
-                                : client.status === 'starting'
-                                ? '#e0f2fe'
-                                : client.status === 'potential'
-                                ? '#f3e8ff'
-                                : client.status === 'paused'
-                                ? '#fffbeb'
-                                : '#ffe4e6',
-                            color:
-                              client.status === 'active'
-                                ? '#047857'
-                                : client.status === 'starting'
-                                ? '#0284c7'
-                                : client.status === 'potential'
-                                ? '#7e22ce'
-                                : client.status === 'paused'
-                                ? '#b45309'
-                                : '#be123c',
+                            backgroundColor: clientStatusSelectStyle(client.status).bg,
+                            color: clientStatusSelectStyle(client.status).text,
                             cursor: 'pointer',
                           }}
                           title="Change Client Stage"
                         >
-                          <option value="potential">Potential</option>
-                          <option value="starting">Starting</option>
                           <option value="active">Active</option>
+                          <option value="starting">Starting</option>
+                          <option value="one_time">One Time Work</option>
                           <option value="paused">Paused</option>
-                          <option value="churned">Churned</option>
                         </select>
                       </td>
 
@@ -698,6 +682,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                       <td style={{ textAlign: 'right', paddingRight: '18px' }}>
                         <Link
                           href={`/clients/${client.id}`}
+                          prefetch={false}
                           onClick={(e) => e.stopPropagation()}
                           className="btn btn-ghost btn-sm"
                           style={{ color: '#4b5563', padding: '3px 6px' }}
@@ -853,23 +838,14 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
                     className="input-field"
                     style={{
                       fontWeight: 600,
-                      backgroundColor:
-                        formData.status === 'active'
-                          ? '#ecfdf5'
-                          : formData.status === 'starting'
-                          ? '#e0f2fe'
-                          : formData.status === 'potential'
-                          ? '#f3e8ff'
-                          : formData.status === 'paused'
-                          ? '#fffbeb'
-                          : '#ffe4e6',
+                      backgroundColor: clientStatusSelectStyle(formData.status).bg,
+                      color: clientStatusSelectStyle(formData.status).text,
                     }}
                   >
-                    <option value="potential">Potential (Lead / Proposal)</option>
-                    <option value="starting">Starting (Onboarding)</option>
                     <option value="active">Active (Ongoing Retainer)</option>
+                    <option value="starting">Starting (Onboarding)</option>
+                    <option value="one_time">One Time Work</option>
                     <option value="paused">Paused (On Hold)</option>
-                    <option value="churned">Churned (Inactive)</option>
                   </select>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 export type UserRole = 'admin' | 'member';
-export type ClientStatus = 'potential' | 'starting' | 'active' | 'paused' | 'churned';
+export type ClientStatus = 'active' | 'starting' | 'one_time' | 'paused';
 export type CreatorRole =
   | 'photographer'
   | 'ugc'

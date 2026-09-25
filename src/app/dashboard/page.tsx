@@ -1,4 +1,5 @@
 import React, { Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/permissions';
@@ -12,7 +13,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { currentMonth, normalizePeriod, periodLabel } from '@/lib/period';
 import { formatMoney, formatCompactNumber } from '@/lib/format';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import FinanceTrend from '@/components/FinanceTrend';
+const FinanceTrend = dynamic(() => import('@/components/FinanceTrend'), { ssr: false });
 
 interface DashboardPageProps {
   searchParams?: { period?: string };
@@ -129,6 +130,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 <Link
                   key={row.client_id}
                   href={`/clients/${row.client_id}`}
+                  prefetch={false}
                   style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 12 }}
                 >
                   <span>{row.clients?.name}</span>
@@ -156,7 +158,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 {top.map((c) => (
                   <tr key={c.id}>
                     <td>
-                      <Link href={`/clients/${c.id}`} style={{ fontWeight: 600 }}>
+                      <Link href={`/clients/${c.id}`} prefetch={false} style={{ fontWeight: 600 }}>
                         {c.name}
                       </Link>
                     </td>

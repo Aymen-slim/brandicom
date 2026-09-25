@@ -15,6 +15,10 @@ export function CreatorCard({ creator, onEdit }: CreatorCardProps) {
     photographer: { bg: '#e0f2fe', text: '#0369a1' },
     ugc: { bg: '#f3e8ff', text: '#7e22ce' },
     presenter: { bg: '#fffbeb', text: '#b45309' },
+    influencer: { bg: '#fce7f3', text: '#be185d' },
+    editor: { bg: '#f1f5f9', text: '#475569' },
+    designer: { bg: '#ecfdf5', text: '#047857' },
+    model: { bg: '#fdf2f8', text: '#9d174d' },
   };
 
   const currentRoleStyle = roleColors[creator.role] || roleColors.videographer;

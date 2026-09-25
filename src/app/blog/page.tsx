@@ -23,9 +23,8 @@ export default async function BlogAdminPage() {
     <AppShell
       user={user}
       title="Blog"
-      subtitle="Write a post with text and two images. Published posts appear on the website blog and post page."
+      subtitle="Compose posts with a cover image and formatted text. Live posts appear on your public website."
     >
-      <style>{`@media (max-width: 900px) { .blog-admin-grid { grid-template-columns: 1fr !important; } }`}</style>
       {loadError ? (
         <div className="glass-card" style={{ padding: 18, color: 'var(--text-muted)' }}>{loadError}</div>
       ) : (

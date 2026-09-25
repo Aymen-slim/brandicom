@@ -28,6 +28,9 @@ interface AlertData {
   unreadCount: number;
 }
 
+const ALERT_TTL_MS = 45_000;
+let alertCache: { at: number; data: AlertData } | null = null;
+
 export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
   const isAdmin = user?.role === 'admin';
   const [data, setData] = useState<AlertData | null>(null);
@@ -39,6 +42,10 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
 
   const fetchAlerts = async () => {
     if (!isAdmin) return;
+    if (alertCache && Date.now() - alertCache.at < ALERT_TTL_MS) {
+      setData(alertCache.data);
+      return;
+    }
     try {
       setLoading(true);
       const res = await fetch('/api/notifications/posting-alerts', {
@@ -49,6 +56,7 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
       }
       if (res.ok) {
         const json: AlertData = await res.json();
+        alertCache = { at: Date.now(), data: json };
         setData(json);
 
         // Check if briefing should be shown "first thing" when on site
@@ -71,18 +79,31 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
   };
 
   useEffect(() => {
+    let idleId = 0;
+    let timerId = 0;
     if (isAdmin) {
-      fetchAlerts();
+      if (typeof window.requestIdleCallback === 'function') {
+        idleId = window.requestIdleCallback(() => {
+          fetchAlerts();
+        });
+      } else {
+        timerId = window.setTimeout(() => {
+          fetchAlerts();
+        }, 300);
+      }
     }
 
-    // Close dropdown on outside click
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      if (idleId) window.cancelIdleCallback(idleId);
+      if (timerId) window.clearTimeout(timerId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, [isAdmin]);
 
   const handleMarkPublished = async (id: string, e?: React.MouseEvent) => {
@@ -100,12 +121,14 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
           if (!prev) return prev;
           const todayFiltered = prev.todayPosts.filter((d) => d.id !== id);
           const overdueFiltered = prev.overduePosts.filter((d) => d.id !== id);
-          return {
+          const next = {
             ...prev,
             todayPosts: todayFiltered,
             overduePosts: overdueFiltered,
             unreadCount: Math.max(0, prev.unreadCount - 1),
           };
+          alertCache = { at: Date.now(), data: next };
+          return next;
         });
       }
     } catch (err) {

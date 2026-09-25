@@ -79,7 +79,7 @@ async function applyAction(action: z.infer<typeof ActionSchema>, user: CurrentUs
         {
           name: action.name.trim(),
           location: action.location?.trim() || null,
-          status: action.status && isClientStatus(action.status) ? action.status : 'potential',
+          status: action.status && isClientStatus(action.status) ? action.status : 'starting',
           services,
           notes: action.notes?.trim() || null,
           industry: action.industry?.trim() || null,

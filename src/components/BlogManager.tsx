@@ -1,7 +1,18 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SitePost } from '@/lib/sitePosts';
+import {
+  Clock,
+  Eye,
+  EyeOff,
+  ImageIcon,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 
 interface BlogManagerProps {
   initialPosts: SitePost[];
@@ -13,6 +24,27 @@ const emptyForm = {
   body: '',
   published: true,
 };
+
+function estimateReadMinutes(body: string): number {
+  const words = body.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+}
+
+function formatPostDate(iso: string): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
+}
+
+function bodyParagraphs(body: string): string[] {
+  return body
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
 
 async function uploadImage(file: File): Promise<string> {
   const form = new FormData();
@@ -27,28 +59,67 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
   const [posts, setPosts] = useState<SitePost[]>(initialPosts);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState('');
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverUrl, setCoverUrl] = useState('');
   const [coverPreview, setCoverPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [listQuery, setListQuery] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    setPosts(initialPosts);
+  }, [initialPosts]);
+
+  const readMinutes = useMemo(() => estimateReadMinutes(form.body), [form.body]);
+  const wordCount = useMemo(
+    () => form.body.trim().split(/\s+/).filter(Boolean).length,
+    [form.body]
+  );
+
+  const filteredPosts = useMemo(() => {
+    const q = listQuery.trim().toLowerCase();
+    if (!q) return posts;
+    return posts.filter(
+      (p) =>
+        p.title.toLowerCase().includes(q) ||
+        p.excerpt.toLowerCase().includes(q) ||
+        p.slug.toLowerCase().includes(q)
+    );
+  }, [posts, listQuery]);
 
   const reset = () => {
     setForm(emptyForm);
     setEditingId(null);
+    setEditingSlug('');
     setCoverFile(null);
     setCoverUrl('');
     setCoverPreview('');
     setError('');
   };
 
-  const onCoverFile = (file: File | null) => {
+  const applyCoverFile = (file: File | null) => {
     setCoverFile(file);
-    setCoverPreview(file ? URL.createObjectURL(file) : coverUrl);
+    if (file) {
+      setCoverPreview(URL.createObjectURL(file));
+    } else {
+      setCoverPreview(coverUrl);
+    }
+  };
+
+  const clearCover = () => {
+    setCoverFile(null);
+    setCoverUrl('');
+    setCoverPreview('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const edit = (post: SitePost) => {
     setEditingId(post.id);
+    setEditingSlug(post.slug);
     setForm({
       title: post.title,
       excerpt: post.excerpt,
@@ -59,7 +130,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
     setCoverUrl(post.coverImageUrl);
     setCoverPreview(post.coverImageUrl);
     setError('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const save = async (event: React.FormEvent) => {
@@ -70,7 +141,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
     try {
       const nextCover = coverFile ? await uploadImage(coverFile) : coverUrl;
       if (!nextCover) {
-        throw new Error('Add an image before publishing.');
+        throw new Error('Add a cover image before saving.');
       }
       const payload = {
         title: form.title,
@@ -92,8 +163,9 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
         return [data as SitePost, ...without];
       });
       reset();
-    } catch (err: any) {
-      setError(err.message || 'Could not save the post');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not save the post';
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -110,74 +182,268 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
     if (editingId === post.id) reset();
   };
 
-  return (
-    <div className="blog-admin-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(280px, 0.9fr)', gap: 16 }}>
-      <form className="glass-card" onSubmit={save} style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontWeight: 700 }}>{editingId ? 'Edit post' : 'New blog post'}</div>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span>Title</span>
-          <input className="input-field" value={form.title} maxLength={160} required onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span>Short summary</span>
-          <input className="input-field" value={form.excerpt} maxLength={220} placeholder="Shown on the blog card" onChange={(e) => setForm({ ...form, excerpt: e.target.value })} />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span>Post text</span>
-          <textarea className="input-field" rows={12} required value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} placeholder="Write the article. A blank line starts a new paragraph." />
-        </label>
-        <ImageField label="Post image" preview={coverPreview} onChange={onCoverFile} />
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} />
-          Show on the website
-        </label>
-        {error ? <div style={{ color: '#e11d48', fontSize: 13 }}>{error}</div> : null}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editingId ? 'Update post' : 'Publish post'}</button>
-          {editingId ? <button className="btn btn-secondary" type="button" onClick={reset}>Cancel</button> : null}
-        </div>
-      </form>
+  const previewExcerpt =
+    form.excerpt.trim() ||
+    form.body.replace(/\s+/g, ' ').trim().slice(0, 160) ||
+    'Add a short summary for blog cards…';
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {posts.length === 0 ? (
-          <div className="glass-card" style={{ padding: 18, color: 'var(--text-muted)' }}>No posts yet.</div>
-        ) : posts.map((post) => (
-          <article key={post.id} className="glass-card" style={{ padding: 14, display: 'grid', gridTemplateColumns: '72px 1fr', gap: 12 }}>
-            {post.coverImageUrl ? <img src={post.coverImageUrl} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 8 }} /> : <div />}
+  return (
+    <div className="blog-admin">
+      <div className="blog-admin-toolbar glass-card">
+        <div>
+          <div className="blog-admin-toolbar-title">Website blog</div>
+          <div className="blog-admin-toolbar-meta">
+            {posts.length} post{posts.length === 1 ? '' : 's'} · {posts.filter((p) => p.published).length} live
+          </div>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={reset}>
+          <Plus size={14} />
+          New post
+        </button>
+      </div>
+
+      <div className="blog-admin-grid">
+        <form ref={composerRef} className="blog-composer glass-card" onSubmit={save}>
+          <div className="blog-composer-header">
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <strong>{post.title}</strong>
-                <span className="badge" style={{ background: post.published ? '#ecfdf5' : '#f3f4f6', color: post.published ? '#059669' : '#6b7280' }}>
-                  {post.published ? 'Live' : 'Hidden'}
-                </span>
+              <h2 className="blog-composer-heading">{editingId ? 'Edit post' : 'Write a post'}</h2>
+              {editingSlug ? (
+                <p className="blog-composer-slug">/{editingSlug}</p>
+              ) : (
+                <p className="blog-composer-slug blog-composer-slug-muted">Slug is generated from the title when you save</p>
+              )}
+            </div>
+            <div className="blog-status-toggle" role="group" aria-label="Publication status">
+              <button
+                type="button"
+                className={`blog-status-btn ${!form.published ? 'active' : ''}`}
+                onClick={() => setForm({ ...form, published: false })}
+              >
+                <EyeOff size={13} />
+                Draft
+              </button>
+              <button
+                type="button"
+                className={`blog-status-btn ${form.published ? 'active' : ''}`}
+                onClick={() => setForm({ ...form, published: true })}
+              >
+                <Eye size={13} />
+                Live
+              </button>
+            </div>
+          </div>
+
+          <label className="blog-field">
+            <span className="blog-field-label">Title</span>
+            <input
+              className="input-field blog-title-input"
+              value={form.title}
+              maxLength={160}
+              required
+              placeholder="Catchy headline for the article"
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+            />
+            <span className="blog-field-hint">{form.title.length}/160</span>
+          </label>
+
+          <label className="blog-field">
+            <span className="blog-field-label">Card summary</span>
+            <input
+              className="input-field"
+              value={form.excerpt}
+              maxLength={220}
+              placeholder="One line shown on the blog listing (optional — we can use the opening text)"
+              onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
+            />
+            <span className="blog-field-hint">{form.excerpt.length}/220</span>
+          </label>
+
+          <label className="blog-field">
+            <span className="blog-field-label">Article</span>
+            <textarea
+              className="input-field blog-body-input"
+              rows={14}
+              required
+              value={form.body}
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+              placeholder="Write your story here. Press Enter twice to start a new paragraph on the website."
+            />
+            <span className="blog-field-hint">
+              {wordCount} words · ~{readMinutes} min read
+            </span>
+          </label>
+
+          <div className="blog-field">
+            <span className="blog-field-label">Cover image</span>
+            <div
+              className={`blog-cover-drop ${dragOver ? 'blog-cover-drop-active' : ''} ${coverPreview ? 'blog-cover-drop-has-image' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file && file.type.startsWith('image/')) applyCoverFile(file);
+              }}
+              onClick={() => !coverPreview && fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="blog-cover-file-input"
+                onChange={(e) => applyCoverFile(e.target.files?.[0] || null)}
+              />
+              {coverPreview ? (
+                <>
+                  <img src={coverPreview} alt="" className="blog-cover-preview" />
+                  <div className="blog-cover-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      <Upload size={12} />
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        clearCover();
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="blog-cover-placeholder">
+                  <ImageIcon size={28} strokeWidth={1.5} color="#9ca3af" />
+                  <p>Drop an image here or click to upload</p>
+                  <span>JPEG, PNG, WebP or GIF · max 5 MB</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {error ? <div className="blog-error">{error}</div> : null}
+
+          <div className="blog-composer-actions">
+            <button className="btn btn-primary" type="submit" disabled={saving}>
+              {saving ? 'Saving…' : editingId ? 'Save changes' : form.published ? 'Publish post' : 'Save draft'}
+            </button>
+            {editingId ? (
+              <button className="btn btn-secondary" type="button" onClick={reset}>
+                Cancel edit
+              </button>
+            ) : null}
+          </div>
+        </form>
+
+        <aside className="blog-admin-side">
+          <div className="glass-card blog-preview-card">
+            <div className="blog-preview-label">Live preview</div>
+            <article className="blog-preview-article">
+              {coverPreview ? (
+                <img src={coverPreview} alt="" className="blog-preview-cover" />
+              ) : (
+                <div className="blog-preview-cover blog-preview-cover-empty">Cover image</div>
+              )}
+              <div className="blog-preview-meta">
+                <Clock size={12} />
+                {readMinutes} min read
+                {!form.published && (
+                  <span className="blog-preview-draft-pill">Draft</span>
+                )}
               </div>
-              <p style={{ color: 'var(--text-muted)', margin: '6px 0 10px' }}>{post.excerpt}</p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary btn-sm" type="button" onClick={() => edit(post)}>Edit</button>
-                <button className="btn btn-danger btn-sm" type="button" onClick={() => remove(post)}>Delete</button>
+              <h3 className="blog-preview-title">{form.title.trim() || 'Post title'}</h3>
+              <p className="blog-preview-excerpt">{previewExcerpt}</p>
+              <div className="blog-preview-body">
+                {bodyParagraphs(form.body).length > 0
+                  ? bodyParagraphs(form.body).map((para, i) => <p key={i}>{para}</p>)
+                  : <p className="blog-preview-placeholder">Your paragraphs will appear here as you write.</p>}
+              </div>
+            </article>
+          </div>
+
+          <div className="glass-card blog-list-card">
+            <div className="blog-list-header">
+              <span className="blog-list-title">All posts</span>
+              <div className="blog-list-search">
+                <Search size={14} color="var(--text-muted)" />
+                <input
+                  type="search"
+                  placeholder="Search…"
+                  value={listQuery}
+                  onChange={(e) => setListQuery(e.target.value)}
+                  aria-label="Search posts"
+                />
               </div>
             </div>
-          </article>
-        ))}
+
+            <div className="blog-list-scroll">
+              {filteredPosts.length === 0 ? (
+                <p className="blog-list-empty">
+                  {posts.length === 0 ? 'No posts yet — write your first one on the left.' : 'No posts match your search.'}
+                </p>
+              ) : (
+                filteredPosts.map((post) => (
+                  <article
+                    key={post.id}
+                    className={`blog-list-item ${editingId === post.id ? 'blog-list-item-active' : ''}`}
+                  >
+                    {post.coverImageUrl ? (
+                      <img src={post.coverImageUrl} alt="" className="blog-list-thumb" />
+                    ) : (
+                      <div className="blog-list-thumb blog-list-thumb-empty" />
+                    )}
+                    <div className="blog-list-body">
+                      <div className="blog-list-row">
+                        <strong className="blog-list-item-title">{post.title}</strong>
+                        <span
+                          className={`blog-list-status ${post.published ? 'blog-list-status-live' : 'blog-list-status-draft'}`}
+                        >
+                          {post.published ? 'Live' : 'Draft'}
+                        </span>
+                      </div>
+                      <p className="blog-list-excerpt">{post.excerpt || '—'}</p>
+                      <div className="blog-list-meta">
+                        {formatPostDate(post.publishedAt)} · {post.readMinutes} min
+                      </div>
+                      <div className="blog-list-actions">
+                        <button className="btn btn-secondary btn-sm" type="button" onClick={() => edit(post)}>
+                          <Pencil size={12} />
+                          Edit
+                        </button>
+                        <button className="btn btn-danger btn-sm" type="button" onClick={() => remove(post)}>
+                          <Trash2 size={12} />
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
-  );
-}
-
-function ImageField({
-  label,
-  preview,
-  onChange,
-}: {
-  label: string;
-  preview: string;
-  onChange: (file: File | null) => void;
-}) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span>{label}</span>
-      <input className="input-field" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => onChange(e.target.files?.[0] || null)} />
-      {preview ? <img src={preview} alt="" style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8 }} /> : null}
-    </label>
   );
 }

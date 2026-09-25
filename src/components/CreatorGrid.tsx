@@ -320,6 +320,10 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
                     <option value="photographer">Photographer</option>
                     <option value="ugc">UGC Creator</option>
                     <option value="presenter">Presenter / Host</option>
+                    <option value="influencer">Influencer</option>
+                    <option value="editor">Editor</option>
+                    <option value="designer">Designer</option>
+                    <option value="model">Model</option>
                   </select>
                 </div>
               </div>

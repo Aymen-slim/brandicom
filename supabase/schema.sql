@@ -11,7 +11,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  create type public.client_status as enum ('potential', 'starting', 'active', 'paused', 'churned');
+  create type public.client_status as enum ('potential', 'starting', 'active', 'paused', 'churned', 'one_time');
 exception when duplicate_object then null; end $$;
 
 do $$ begin
@@ -88,7 +88,7 @@ create table if not exists public.clients (
   id             uuid primary key default gen_random_uuid(),
   name           text not null,
   location       text,
-  status         public.client_status not null default 'potential',
+  status         public.client_status not null default 'starting',
   services       text[] not null default '{}',
   notes          text,
   industry       text,
@@ -832,7 +832,7 @@ begin
   from (select status, count(*) as cnt from public.clients group by status) s;
 
   select count(*) into v_active  from public.clients where status = 'active';
-  select count(*) into v_churned from public.clients where status = 'churned';
+  v_churned := 0;
   select count(*) into v_total   from public.clients;
 
   if v_admin then

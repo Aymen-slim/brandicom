@@ -13,9 +13,9 @@ interface ChatItem {
   proposal?: { proposalId: string; actions: unknown[]; summary?: string };
 }
 
-export function AiAssistantDrawer() {
+export function AiAssistantDrawer({ initialOpen = false }: { initialOpen?: boolean }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [input, setInput] = useState('');
   const [items, setItems] = useState<ChatItem[]>([]);
   const [busy, setBusy] = useState(false);

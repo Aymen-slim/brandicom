@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { createServerSupabaseClient } from './supabase/server';
+import { getSessionUser } from './permissions';
 import { ClientStatus, DashboardMetrics } from '@/types';
 import { currentMonth, detectPeriodKind, normalizePeriod } from './period';
 
@@ -58,13 +59,8 @@ async function computeSnapshotDirectly(
     throw new Error(`Invalid period format: ${periodValue}`);
   }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = user
-    ? await supabase.from('users').select('role').eq('id', user.id).maybeSingle()
-    : { data: null };
-  const isAdmin = profile?.role === 'admin';
+  const session = await getSessionUser();
+  const isAdmin = session?.role === 'admin';
 
   const [
     paymentsRes,
@@ -144,7 +140,7 @@ async function computeSnapshotDirectly(
     viewsActual += Number(latest?.views || 0);
   }
 
-  const pipeline: Record<string, number> = { potential: 0, starting: 0, active: 0, paused: 0, churned: 0 };
+  const pipeline: Record<string, number> = { active: 0, starting: 0, one_time: 0, paused: 0 };
   let newClientsActual = 0;
   const startTs = new Date(`${startDateStr}T00:00:00Z`).getTime();
   const endTs = new Date(`${endDateStr}T23:59:59.999Z`).getTime();
@@ -163,7 +159,7 @@ async function computeSnapshotDirectly(
 
   const totalClients = (clientsRes.data || []).length;
   const activeCount = pipeline.active;
-  const churnedCount = pipeline.churned;
+  const churnedCount = 0;
 
   const targets: Record<string, number> = {};
   for (const g of goalsRes.data || []) {
@@ -215,21 +211,28 @@ async function computeSnapshotDirectly(
   };
 }
 
+let snapshotRpcDownUntil = 0;
+
 const getSnapshot = cache(async (periodValue: string): Promise<DashboardSnapshot> => {
   const supabase = createServerSupabaseClient();
-  try {
-    const { data, error } = await supabase.rpc('get_dashboard_snapshot', {
-      p_period: periodValue,
-    });
+  if (Date.now() >= snapshotRpcDownUntil) {
+    try {
+      const { data, error } = await supabase.rpc('get_dashboard_snapshot', {
+        p_period: periodValue,
+      });
 
-    if (!error && data) {
-      return data as unknown as DashboardSnapshot;
+      if (!error && data) {
+        snapshotRpcDownUntil = 0;
+        return data as unknown as DashboardSnapshot;
+      }
+      if (error) {
+        snapshotRpcDownUntil = Date.now() + 5 * 60_000;
+        console.warn('get_dashboard_snapshot RPC returned error, using direct query fallback:', error.message);
+      }
+    } catch (err) {
+      snapshotRpcDownUntil = Date.now() + 5 * 60_000;
+      console.warn('get_dashboard_snapshot RPC call failed, using direct query fallback:', err);
     }
-    if (error) {
-      console.warn('get_dashboard_snapshot RPC returned error, using direct query fallback:', error.message);
-    }
-  } catch (err) {
-    console.warn('get_dashboard_snapshot RPC call failed, using direct query fallback:', err);
   }
 
   return computeSnapshotDirectly(supabase, periodValue);
@@ -246,11 +249,10 @@ export async function computeGoalsAndMetrics(periodValue?: string): Promise<Dash
   const isYear = detectPeriodKind(period) === 'year';
 
   const pipelineBreakdown: Record<ClientStatus, number> = {
-    potential: 0,
-    starting: 0,
     active: 0,
+    starting: 0,
+    one_time: 0,
     paused: 0,
-    churned: 0,
   };
 
   let totalClients = 0;
@@ -259,9 +261,8 @@ export async function computeGoalsAndMetrics(periodValue?: string): Promise<Dash
     totalClients += Number(count);
   }
 
-  const retentionDenominator = snap.activeCount + snap.churnedCount;
   const retentionActual =
-    retentionDenominator > 0 ? Math.round((snap.activeCount / retentionDenominator) * 100) : 100;
+    snap.totalClients > 0 ? Math.round((snap.activeCount / snap.totalClients) * 100) : 100;
 
   const targetMap: Record<string, number> = {};
   for (const [metric, target] of Object.entries(snap.targets || {})) {

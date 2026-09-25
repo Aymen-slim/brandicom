@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ClientStatus } from '@/types';
+import { CLIENT_STATUS_LABELS, CLIENT_STATUS_STYLES, normalizeClientStatus } from '@/lib/clientStatus';
 
 interface StatusBadgeProps {
   status: ClientStatus | string;
@@ -9,28 +10,9 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
-  const normalized = (status || 'potential').toLowerCase();
-
-  const labels: Record<string, string> = {
-    active: 'Active',
-    starting: 'Starting',
-    potential: 'Potential',
-    paused: 'Paused',
-    churned: 'Churned',
-  };
-
-  const label = labels[normalized] || normalized;
-
-  // Custom pastel pill styles matching reference image
-  const pillStyles: Record<string, { bg: string; text: string }> = {
-    active: { bg: '#ecfdf5', text: '#047857' },     // Soft mint
-    starting: { bg: '#e0f2fe', text: '#0284c7' },   // Soft sky (like 'Verbal' in screenshot)
-    potential: { bg: '#f3e8ff', text: '#7e22ce' },  // Soft lavender (like 'Proposal' in screenshot)
-    paused: { bg: '#fffbeb', text: '#b45309' },     // Soft amber
-    churned: { bg: '#ffe4e6', text: '#be123c' },    // Soft rose
-  };
-
-  const current = pillStyles[normalized] || pillStyles.potential;
+  const normalized = normalizeClientStatus(status);
+  const label = CLIENT_STATUS_LABELS[normalized];
+  const current = CLIENT_STATUS_STYLES[normalized];
 
   return (
     <span

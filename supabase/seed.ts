@@ -254,7 +254,7 @@ async function main() {
     {
       name: 'Kinetix Apparel',
       location: 'Los Angeles, CA',
-      status: 'potential',
+      status: 'starting',
       services: ['Seasonal Lookbook', 'Influencer Collabs'],
       industry: 'Apparel',
       start_date: '2026-09-01',
@@ -282,7 +282,7 @@ async function main() {
     {
       name: 'Velox EV Motors',
       location: 'Stockholm, SE',
-      status: 'churned',
+      status: 'paused',
       services: ['Launch Campaign', 'Press Reel'],
       industry: 'Automotive',
       start_date: '2025-06-01',

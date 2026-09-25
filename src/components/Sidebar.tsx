@@ -224,6 +224,7 @@ export function Sidebar({ user, topClients = [], isOpen = false, onClose }: Side
                   <Link
                     key={acc.id}
                     href={`/clients/${acc.id}`}
+                    prefetch={false}
                     onClick={onClose}
                     className="sidebar-client-link"
                   >
