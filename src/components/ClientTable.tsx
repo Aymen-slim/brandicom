@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ClientData, ClientStatus, UserSummary } from '@/types';
 import { StatusBadge } from './StatusBadge';
+import { notifyWorkspaceChange } from '@/lib/workspaceEvents';
+import { ListPagination, useListFilters } from './ListPagination';
+import type { PageResult } from '@/lib/pagination';
 import { formatMoney, formatTenure, formatNumber, getProxiedImageUrl } from '@/lib/format';
 import { clientStatusSelectStyle, sortClientsForDisplay } from '@/lib/clientStatus';
 import {
@@ -25,17 +28,24 @@ interface ClientTableProps {
   initialClients: ClientData[];
   availableUsers: UserSummary[];
   user?: UserSummary | null;
+  initialPage?: PageResult<ClientData>;
+  initialFilters?: { status?: string; assignedTo?: string; search?: string };
 }
 
-export function ClientTable({ initialClients, availableUsers, user }: ClientTableProps) {
+export function ClientTable({ initialClients, availableUsers, user, initialPage, initialFilters = {} }: ClientTableProps) {
   const router = useRouter();
   const isAdmin = user?.role === 'admin';
 
   const [clients, setClients] = useState<ClientData[]>(initialClients);
   useEffect(() => setClients(initialClients), [initialClients]);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [assignedFilter, setAssignedFilter] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState(initialFilters.status || 'all');
+  const [assignedFilter, setAssignedFilter] = useState(initialFilters.assignedTo || 'all');
+  const [searchQuery, setSearchQuery] = useState(initialFilters.search || '');
+  const pending = useListFilters({ status: statusFilter, assigned_to: assignedFilter, search: searchQuery },
+    { status: initialFilters.status || 'all', assigned_to: initialFilters.assignedTo || 'all', search: initialFilters.search || '' },
+    (values) => {
+      setStatusFilter(values.status || 'all'); setAssignedFilter(values.assigned_to || 'all'); setSearchQuery(values.search || '');
+    });
 
   // New Client Modal
   const [showModal, setShowModal] = useState(false);
@@ -59,6 +69,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
 
   // Filter clients
   const filteredClients = useMemo(() => {
+    if (initialPage) return clients;
     const filtered = clients.filter((c) => {
       if (statusFilter !== 'all' && c.status !== statusFilter) return false;
       if (assignedFilter !== 'all') {
@@ -75,22 +86,35 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
       return true;
     });
     return sortClientsForDisplay(filtered);
-  }, [clients, statusFilter, assignedFilter, searchQuery]);
+  }, [clients, statusFilter, assignedFilter, searchQuery, initialPage]);
 
   // CSV Export
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
+    let exportClients = filteredClients;
+    if (initialPage) {
+      try {
+        const params = new URLSearchParams({ export: '1' });
+        if (statusFilter !== 'all') params.set('status', statusFilter);
+        if (assignedFilter !== 'all') params.set('assigned_to', assignedFilter);
+        if (searchQuery.trim()) params.set('search', searchQuery.trim());
+        const res = await fetch(`/api/clients?${params}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not export the roster');
+        const result: PageResult<ClientData> = await res.json();
+        exportClients = result.items;
+      } catch {
+        alert('Could not export the roster. Please try again.');
+        return;
+      }
+    }
     const headers = isAdmin
       ? ['Client Name', 'Status', 'Location', 'Monthly Fee (TND)', 'Services', 'Assigned Team']
       : ['Client Name', 'Status', 'Location', 'Services', 'Assigned Team'];
-    const rows = filteredClients.map((c) => {
-      const base = [
-        `"${c.name.replace(/"/g, '""')}"`,
-        c.status,
-        `"${(c.location || '').replace(/"/g, '""')}"`,
-      ];
+    const textCell = (value: string) => `"${(/^[\s]*[=+\-@]|^[\t\r\n]/.test(value) ? `'${value}` : value).replace(/"/g, '""')}"`;
+    const rows = exportClients.map((c) => {
+      const base = [textCell(c.name), c.status, textCell(c.location || '')];
       if (isAdmin) base.push(String(c.contract?.monthlyFee || 0));
-      base.push(`"${c.services.join('; ').replace(/"/g, '""')}"`);
-      base.push(`"${(c.assignments || []).map((a) => a.user.name).join(', ').replace(/"/g, '""')}"`);
+      base.push(textCell(c.services.join('; ')));
+      base.push(textCell((c.assignments || []).map((a) => a.user.name).join(', ')));
       return base;
     });
 
@@ -103,6 +127,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // Quick stage change directly from table
@@ -124,6 +149,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
         setClients((prev) =>
           sortClientsForDisplay(prev.map((c) => (c.id === clientId ? { ...c, ...updated } : c)))
         );
+        notifyWorkspaceChange('accounts');
       }
     } catch (err) {
       console.error('Error changing client stage:', err);
@@ -223,7 +249,7 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           monthlyOtherLabel: '',
           logoUrl: '',
         });
-        router.refresh();
+        notifyWorkspaceChange('accounts');
       } else {
         const err = await res.json().catch(() => ({}));
         alert(err.error || 'Failed to create client account');
@@ -249,7 +275,8 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
   };
 
   return (
-    <div>
+    <div aria-busy={pending}>
+      {pending && <div role="status" style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Updating roster...</div>}
       {/* Controls: Search, Filters & Actions */}
       <div
         className="glass-card"
@@ -698,6 +725,8 @@ export function ClientTable({ initialClients, availableUsers, user }: ClientTabl
           </table>
         </div>
       </div>
+
+      {initialPage && <ListPagination result={initialPage} />}
 
       {/* New Client Modal */}
       {showModal && (

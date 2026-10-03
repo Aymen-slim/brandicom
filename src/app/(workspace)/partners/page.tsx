@@ -2,7 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionUser, isAdmin } from '@/lib/permissions';
 import { fetchCreators } from '@/lib/data';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { CreatorGrid } from '@/components/CreatorGrid';
 
 export default async function PartnersPage() {
@@ -13,12 +13,12 @@ export default async function PartnersPage() {
   const creators = await fetchCreators({ isAdmin: isUserAdmin });
 
   return (
-    <AppShell
+    <PageChrome pathname="/partners"
       user={user}
       title="Partners"
       subtitle="Photographers, influencers, agencies, editors, and talent"
     >
       <CreatorGrid initialCreators={creators} isAdmin={isUserAdmin} />
-    </AppShell>
+    </PageChrome>
   );
 }

@@ -3,6 +3,7 @@ const nextConfig = {
   reactStrictMode: true,
   experimental: {
     optimizePackageImports: ['lucide-react', 'recharts'],
+    staleTimes: { dynamic: 0 },
   },
   async headers() {
     return [

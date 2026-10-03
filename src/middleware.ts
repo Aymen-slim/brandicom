@@ -15,6 +15,16 @@ const PROTECTED_PREFIXES = [
 const ADMIN_PREFIXES = ['/finance', '/leads', '/blog'];
 
 export async function middleware(request: NextRequest) {
+  if (
+    (request.method === 'GET' || request.method === 'HEAD') &&
+    request.nextUrl.pathname === '/.well-known/appspecific/com.chrome.devtools.json'
+  ) {
+    return new NextResponse(null, {
+      status: 204,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
   // Handle OPTIONS preflight requests cleanly
   if (request.method === 'OPTIONS') {
     const origin = request.headers.get('origin') || '*';

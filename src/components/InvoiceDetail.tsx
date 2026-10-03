@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { InvoiceData, PaymentData, PaymentMethod } from '@/types';
@@ -23,7 +23,9 @@ import {
   Receipt,
   Sparkles,
 } from 'lucide-react';
-import { FactureDocument } from './FactureDocument';
+import dynamic from 'next/dynamic';
+
+const FactureDocument = dynamic(() => import('./FactureDocument').then((mod) => mod.FactureDocument), { loading: () => <div role="status">Loading invoice document...</div> });
 
 export function InvoiceDetail({
   invoice: initialInvoice,
@@ -35,6 +37,8 @@ export function InvoiceDetail({
   const router = useRouter();
   const [invoice, setInvoice] = useState<InvoiceData>(initialInvoice);
   const [payments, setPayments] = useState<PaymentData[]>(initialPayments);
+  useEffect(() => setInvoice(initialInvoice), [initialInvoice]);
+  useEffect(() => setPayments(initialPayments), [initialPayments]);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('bank_transfer');
   const [reference, setReference] = useState('');

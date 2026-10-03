@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser, isAdmin } from '@/lib/permissions';
 import { fetchFinanceSummary } from '@/lib/finance';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import FinanceTrend from '@/components/FinanceTrend';
 import { PeriodPicker } from '@/components/PeriodPicker';
 import { currentMonth, normalizePeriod, periodLabel } from '@/lib/period';
@@ -19,7 +19,7 @@ export default async function FinancePage({ searchParams }: { searchParams?: { p
   const summary = await fetchFinanceSummary(period);
 
   return (
-    <AppShell
+    <PageChrome pathname="/finance" period={period}
       user={user}
       title="Finance"
       subtitle={`${periodLabel(period)} · TND`}
@@ -90,7 +90,7 @@ export default async function FinancePage({ searchParams }: { searchParams?: { p
           </table>
         </div>
       </div>
-    </AppShell>
+    </PageChrome>
   );
 }
 

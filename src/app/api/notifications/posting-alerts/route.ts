@@ -5,6 +5,7 @@ import { fetchAdminPostingAlerts } from '@/lib/data';
 function getCorsHeaders(request?: NextRequest) {
   const origin = request?.headers.get('origin') || '*';
   return {
+    'Cache-Control': 'private, no-store',
     'Access-Control-Allow-Origin': origin,
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',

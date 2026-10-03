@@ -16,6 +16,12 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser, 
   const [messages, setMessages] = useState<MessageData[]>(initialMessages);
   const [inputText, setInputText] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [loading, setLoading] = useState(initialMessages.length === 0);
+  const [loadError, setLoadError] = useState('');
+  const [hasOlder, setHasOlder] = useState(true);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const prepending = useRef(false);
+  const olderRequest = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastTimestampRef = useRef<string | null>(
     initialMessages.length > 0
@@ -23,44 +29,85 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser, 
       : null
   );
 
+  const lastIdRef = useRef<string | null>(initialMessages.length ? initialMessages[initialMessages.length - 1].id : null);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (prepending.current) prepending.current = false;
+    else scrollToBottom();
   }, [messages.length]);
 
   // Polling mechanism every 4.5 seconds (Section 6)
   useEffect(() => {
-    const interval = setInterval(async () => {
+    let active = true;
+    let request: AbortController | null = null;
+    const poll = async () => {
+      if (!active || request || document.visibilityState !== 'visible') return;
+      const controller = new AbortController();
+      request = controller;
       try {
+        const firstRead = !lastTimestampRef.current;
         const url = lastTimestampRef.current
-          ? `/api/clients/${clientId}/messages?since=${encodeURIComponent(lastTimestampRef.current)}`
-          : `/api/clients/${clientId}/messages`;
-
-        const res = await fetch(url);
-        if (res.ok) {
-          const newMessages: MessageData[] = await res.json();
-          if (newMessages.length > 0) {
-            setMessages((prev) => {
-              const existingIds = new Set(prev.map((m) => m.id));
-              const filtered = newMessages.filter((m) => !existingIds.has(m.id));
-              if (filtered.length === 0) return prev;
-
-              const updated = [...prev, ...filtered];
-              lastTimestampRef.current = updated[updated.length - 1].createdAt;
-              return updated;
-            });
-          }
+          ? `/api/clients/${clientId}/messages?since=${encodeURIComponent(lastTimestampRef.current)}${lastIdRef.current ? `&cursorId=${encodeURIComponent(lastIdRef.current)}` : ''}`
+          : `/api/clients/${clientId}/messages?recent=1`;
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not load messages');
+        const rows: MessageData[] = await res.json();
+        if (!active) return;
+        setLoadError('');
+        if (firstRead) setHasOlder(rows.length === 100);
+        if (rows.length) {
+          lastTimestampRef.current = rows[rows.length - 1].createdAt;
+          lastIdRef.current = rows[rows.length - 1].id;
+          setMessages((previous) => Array.from(new Map([...previous, ...rows].map((row) => [row.id, row])).values())
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)));
         }
       } catch (err) {
-        console.error('Polling error:', err);
+        if (active && !controller.signal.aborted) {
+          console.error('Polling error:', err);
+          setLoadError('Could not load messages. Retrying while this chat is open.');
+        }
+      } finally {
+        request = null;
+        if (active) setLoading(false);
       }
-    }, 4500);
-
-    return () => clearInterval(interval);
+    };
+    void poll();
+    const interval = setInterval(() => { void poll(); }, 4500);
+    const onVisible = () => { void poll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      active = false;
+      request?.abort();
+      olderRequest.current?.abort();
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [clientId]);
+
+  const loadOlder = async () => {
+    if (!messages.length || loadingOlder) return;
+    olderRequest.current?.abort();
+    const controller = new AbortController();
+    olderRequest.current = controller;
+    setLoadingOlder(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}/messages?before=${encodeURIComponent(messages[0].createdAt)}&cursorId=${encodeURIComponent(messages[0].id)}`, { signal: controller.signal, cache: 'no-store' });
+      if (!res.ok) throw new Error('Could not load older messages');
+      const rows: MessageData[] = await res.json();
+      if (controller.signal.aborted) return;
+      prepending.current = rows.length > 0;
+      setHasOlder(rows.length === 100);
+      setMessages((previous) => Array.from(new Map([...rows, ...previous].map((row) => [row.id, row])).values()));
+    } catch {
+      if (!controller.signal.aborted) setLoadError('Could not load older messages. Please try again.');
+    } finally {
+      if (!controller.signal.aborted) setLoadingOlder(false);
+    }
+  };
 
   // Send message with optimistic update
   const handleSend = async (e: React.FormEvent) => {
@@ -97,14 +144,17 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser, 
         body: JSON.stringify({ body: text }),
       });
 
-      if (res.ok) {
-        const savedMessage: MessageData = await res.json();
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? savedMessage : m))
-        );
-        lastTimestampRef.current = savedMessage.createdAt;
-      }
+      if (!res.ok) throw new Error('Could not send message');
+      const savedMessage: MessageData = await res.json();
+      setMessages((previous) => [...previous.filter((message) => message.id !== tempId && message.id !== savedMessage.id), savedMessage]
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)));
+      lastTimestampRef.current = savedMessage.createdAt;
+      lastIdRef.current = savedMessage.id;
+      setLoadError('');
     } catch (err) {
+      setMessages((previous) => previous.filter((message) => message.id !== tempId));
+      setInputText((previous) => previous || text);
+      setLoadError('Could not send your message. Your draft has been restored.');
       console.error('Error sending message:', err);
     } finally {
       setIsSending(false);
@@ -232,6 +282,8 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser, 
           gap: '12px',
         }}
       >
+        {loadError && <div role="alert" style={{ fontSize: 12, color: '#be123c' }}>{loadError}</div>}
+        {hasOlder && messages.length > 0 && <button type="button" className="btn btn-secondary btn-sm" disabled={loadingOlder} onClick={loadOlder}>{loadingOlder ? 'Loading history...' : 'Load older messages'}</button>}
         {messages.length === 0 ? (
           <div
             style={{
@@ -241,7 +293,7 @@ export function ChatThread({ clientId, initialMessages = [], user: currentUser, 
               fontSize: '12.5px',
             }}
           >
-            No messages yet. Post a brief note or update below.
+            {loading ? 'Loading messages...' : 'No messages yet. Post a brief note or update below.'}
           </div>
         ) : (
           messages.map((m) => {

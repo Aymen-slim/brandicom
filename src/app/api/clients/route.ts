@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enforceAuth, isAdmin } from '@/lib/permissions';
-import { fetchClients, attachClientCounts, createClient, isClientStatus } from '@/lib/data';
+import { fetchClients, attachClientCounts, createClient, isClientStatus, fetchClientPage } from '@/lib/data';
+import { z } from 'zod';
+import { parsePagination } from '@/lib/pagination';
+import { clientFiltersSchema, privateReadHeaders } from '@/lib/listValidation';
 import { packClientMonthlyGoals, computeClientGoalsProgress } from '@/lib/clientGoals';
 
 export async function GET(request: NextRequest) {
@@ -13,6 +16,12 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search');
 
   try {
+    if (searchParams.has('page') || searchParams.has('pageSize') || searchParams.get('export') === '1') {
+      const filters = clientFiltersSchema.parse({ status: status || undefined, assignedTo: assignedTo || undefined, search: search || undefined });
+      const result = await fetchClientPage({ ...filters, userRole: user.role, userId: user.id,
+        ...parsePagination({ page: searchParams.get('page') || undefined, pageSize: searchParams.get('pageSize') || undefined }), fullExport: searchParams.get('export') === '1' });
+      return NextResponse.json(result, { headers: privateReadHeaders });
+    }
     const clients = await fetchClients({
       status,
       assignedTo,
@@ -21,8 +30,9 @@ export async function GET(request: NextRequest) {
       userId: user.id,
     });
     const clientsWithCounts = await attachClientCounts(clients);
-    return NextResponse.json(clientsWithCounts);
+    return NextResponse.json(clientsWithCounts, { headers: privateReadHeaders });
   } catch (err: any) {
+    if (err instanceof z.ZodError) return NextResponse.json({ error: 'Invalid client parameters' }, { status: 400, headers: privateReadHeaders });
     console.error('Error fetching clients:', err);
     return NextResponse.json({ error: 'Failed to fetch clients' }, { status: 500 });
   }

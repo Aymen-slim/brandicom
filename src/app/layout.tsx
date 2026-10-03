@@ -1,24 +1,25 @@
 import type { Metadata, Viewport } from 'next';
-import { Plus_Jakarta_Sans, Outfit, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
-import { CommandSearch } from '@/components/CommandSearch';
-import { AppChrome } from '@/components/AppChrome';
 
-const plusJakartaSans = Plus_Jakarta_Sans({
-  subsets: ['latin'],
-  variable: '--font-sans',
+const plusJakartaSans = localFont({
+  src: '../../node_modules/@fontsource-variable/plus-jakarta-sans/files/plus-jakarta-sans-latin-wght-normal.woff2',
+  weight: '200 800',
+  variable: '--font-plus-jakarta-sans',
   display: 'swap',
 });
 
-const outfit = Outfit({
-  subsets: ['latin'],
-  variable: '--font-display',
+const outfit = localFont({
+  src: '../../node_modules/@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2',
+  weight: '100 900',
+  variable: '--font-outfit',
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  variable: '--font-mono',
+const jetbrainsMono = localFont({
+  src: '../../node_modules/@fontsource-variable/jetbrains-mono/files/jetbrains-mono-latin-wght-normal.woff2',
+  weight: '100 800',
+  variable: '--font-jetbrains-mono',
   display: 'swap',
 });
 
@@ -50,8 +51,6 @@ export default function RootLayout({
     >
       <body className={plusJakartaSans.className}>
         {children}
-        <CommandSearch />
-        <AppChrome />
       </body>
     </html>
   );

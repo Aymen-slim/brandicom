@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from './supabase/server';
 import { ExpenseCategory, ExpenseData, FinanceSummary, InvoiceData, InvoiceStatus, PaymentData, PaymentMethod } from '@/types';
-import { logActivity } from './data';
+import { logActivity, readAllRows } from './data';
+import { selectPage, PageResult } from './pagination';
 import { VAT_RATE, withVat } from './format';
 import { normalizePeriod } from './period';
 import { EXPENSE_CATEGORIES, INVOICE_STATUSES } from './constants';
@@ -83,6 +84,79 @@ export async function fetchFinanceSummary(period?: string): Promise<FinanceSumma
   };
 }
 
+type FinanceClient = ReturnType<typeof createServerSupabaseClient>;
+export interface InvoiceListSummary { totalCount: number; totalBilled: number }
+export interface ExpenseListSummary {
+  totalAmount: number; totalCount: number; oneTimeAmount: number; oneTimeCount: number;
+  regularAmount: number; regularCount: number; regularMonthlyRunrate: number;
+}
+export interface InvoicePageOptions { page?: number; pageSize?: number; status?: string; clientId?: string }
+export interface ExpensePageOptions {
+  page?: number; pageSize?: number; category?: string; clientId?: string; search?: string;
+  type?: string; from?: string; to?: string;
+}
+
+export async function loadInvoicePage(supabase: FinanceClient, opts: InvoicePageOptions = {}): Promise<PageResult<InvoiceData> & { summary: InvoiceListSummary }> {
+  const catalogue = await readAllRows<any>((from, to) => {
+    let query = supabase.from('invoices').select('id, total, issue_date, status, client_id', { count: from === 0 ? 'exact' : undefined });
+    if (opts.status) query = query.eq('status', opts.status);
+    if (opts.clientId) query = query.eq('client_id', opts.clientId);
+    return query.order('issue_date', { ascending: false }).order('id', { ascending: true }).range(from, to);
+  });
+  const result = selectPage(catalogue, opts.page, opts.pageSize);
+  const ids = result.items.map((row) => row.id);
+  const [rows, payments] = ids.length ? await Promise.all([
+    readAllRows<any>((from, to) => supabase.from('invoices')
+      .select('id, client_id, number, issue_date, due_date, period_label, subtotal, vat_rate, total, status, created_at, clients(id, name)', { count: from === 0 ? 'exact' : undefined })
+      .in('id', ids).order('id', { ascending: true }).range(from, to)),
+    readAllRows<any>((from, to) => supabase.from('payments').select('id, invoice_id, amount', { count: from === 0 ? 'exact' : undefined })
+      .in('invoice_id', ids).order('id', { ascending: true }).range(from, to)),
+  ]) : [[], []];
+  const paid = new Map<string, number>();
+  for (const payment of payments) paid.set(payment.invoice_id, (paid.get(payment.invoice_id) || 0) + Number(payment.amount));
+  const byId = new Map(rows.map((row) => [row.id, mapInvoice(row, paid.get(row.id) || 0)]));
+  return { ...result, items: ids.flatMap((id) => byId.has(id) ? [byId.get(id)!] : []),
+    summary: { totalCount: catalogue.length, totalBilled: catalogue.reduce((sum, row) => sum + Number(row.total || 0), 0) } };
+}
+
+export function fetchInvoicePage(opts: InvoicePageOptions = {}) { return loadInvoicePage(createServerSupabaseClient(), opts); }
+
+function mapExpense(row: any): ExpenseData {
+  return { id: row.id, date: row.date, amount: Number(row.amount), category: row.category, description: row.description,
+    clientId: row.client_id, clientName: row.clients?.name ?? null, partnerId: row.partner_id, partnerName: row.creators?.name ?? null,
+    assignmentId: row.assignment_id, recurring: row.recurring, recurrence: row.recurrence, receiptUrl: row.receipt_url,
+    createdBy: row.created_by, createdAt: row.created_at };
+}
+
+export async function loadExpensePage(supabase: FinanceClient, opts: ExpensePageOptions = {}): Promise<PageResult<ExpenseData> & { summary: ExpenseListSummary }> {
+  const term = opts.search?.trim().toLowerCase() || '';
+  const catalogue = await readAllRows<any>((from, to) => supabase.from('expenses')
+    .select(`id, date, amount, recurring, recurrence, category, client_id${term ? ', description, clients(name), creators(name)' : ''}`, { count: from === 0 ? 'exact' : undefined })
+    .order('date', { ascending: false }).order('id', { ascending: true }).range(from, to));
+  const summary: ExpenseListSummary = { totalAmount: 0, totalCount: catalogue.length, oneTimeAmount: 0, oneTimeCount: 0, regularAmount: 0, regularCount: 0, regularMonthlyRunrate: 0 };
+  for (const row of catalogue) {
+    const amount = Number(row.amount || 0);
+    summary.totalAmount += amount;
+    if (row.recurring) { summary.regularAmount += amount; summary.regularCount++; summary.regularMonthlyRunrate += row.recurrence === 'yearly' ? amount / 12 : amount; }
+    else { summary.oneTimeAmount += amount; summary.oneTimeCount++; }
+  }
+  const filtered = catalogue.filter((row) => {
+    if (opts.category && opts.category !== 'all' && row.category !== opts.category) return false;
+    if (opts.clientId && row.client_id !== opts.clientId) return false;
+    if (opts.type === 'one_time' && row.recurring || opts.type === 'regular' && !row.recurring) return false;
+    if (opts.from && row.date < opts.from || opts.to && row.date > opts.to) return false;
+    return !term || [row.description, row.category, row.clients?.name, row.creators?.name].some((value) => String(value || '').toLowerCase().includes(term));
+  });
+  const result = selectPage(filtered, opts.page, opts.pageSize);
+  const ids = result.items.map((row) => row.id);
+  const rows = ids.length ? await readAllRows<any>((from, to) => supabase.from('expenses').select('*, clients(name), creators(name)', { count: from === 0 ? 'exact' : undefined })
+    .in('id', ids).order('id', { ascending: true }).range(from, to)) : [];
+  const byId = new Map(rows.map((row) => [row.id, mapExpense(row)]));
+  return { ...result, items: ids.flatMap((id) => byId.has(id) ? [byId.get(id)!] : []), summary };
+}
+
+export function fetchExpensePage(opts: ExpensePageOptions = {}) { return loadExpensePage(createServerSupabaseClient(), opts); }
+
 export async function fetchInvoices(filters?: { status?: string; clientId?: string }): Promise<InvoiceData[]> {
   const supabase = createServerSupabaseClient();
   let query = supabase.from('invoices').select(INVOICE_SELECT).order('issue_date', { ascending: false });
@@ -104,14 +178,13 @@ export async function fetchInvoices(filters?: { status?: string; clientId?: stri
 
 export async function fetchInvoice(id: string) {
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase.from('invoices').select(INVOICE_SELECT).eq('id', id).maybeSingle();
+  const [{ data, error }, payments] = await Promise.all([
+    supabase.from('invoices').select(INVOICE_SELECT).eq('id', id).maybeSingle(),
+    readAllRows<any>((from, to) => supabase.from('payments').select('id, invoice_id, amount, paid_at, method, reference', { count: from === 0 ? 'exact' : undefined })
+      .eq('invoice_id', id).order('paid_at', { ascending: true }).order('id', { ascending: true }).range(from, to)),
+  ]);
   if (error) throw error;
   if (!data) return null;
-  const { data: payments } = await supabase
-    .from('payments')
-    .select('id, invoice_id, amount, paid_at, method, reference')
-    .eq('invoice_id', id)
-    .order('paid_at', { ascending: true });
   const paid = (payments || []).reduce((s, p) => s + Number(p.amount), 0);
   return {
     invoice: mapInvoice(data, paid),
@@ -306,25 +379,7 @@ export async function fetchExpenses(filters?: {
   if (filters?.to) query = query.lte('date', filters.to);
   const { data, error } = await query;
   if (error) throw error;
-  return (data || []).map(
-    (row: any): ExpenseData => ({
-      id: row.id,
-      date: row.date,
-      amount: Number(row.amount),
-      category: row.category,
-      description: row.description,
-      clientId: row.client_id,
-      clientName: row.clients?.name ?? null,
-      partnerId: row.partner_id,
-      partnerName: row.creators?.name ?? null,
-      assignmentId: row.assignment_id,
-      recurring: row.recurring,
-      recurrence: row.recurrence,
-      receiptUrl: row.receipt_url,
-      createdBy: row.created_by,
-      createdAt: row.created_at,
-    })
-  );
+  return (data || []).map(mapExpense);
 }
 
 export async function createExpense(input: {

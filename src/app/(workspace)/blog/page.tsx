@@ -2,7 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionUser, isAdmin } from '@/lib/permissions';
 import { fetchSitePosts } from '@/lib/sitePosts';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { BlogManager } from '@/components/BlogManager';
 
 export default async function BlogAdminPage() {
@@ -20,7 +20,7 @@ export default async function BlogAdminPage() {
   }
 
   return (
-    <AppShell
+    <PageChrome pathname="/blog"
       user={user}
       title="Blog"
       subtitle="Compose posts with a cover image and formatted text. Live posts appear on your public website."
@@ -30,6 +30,6 @@ export default async function BlogAdminPage() {
       ) : (
         <BlogManager initialPosts={posts} />
       )}
-    </AppShell>
+    </PageChrome>
   );
 }

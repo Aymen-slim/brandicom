@@ -23,6 +23,7 @@ export function createServerSupabaseClient() {
     getEnv('NEXT_PUBLIC_SUPABASE_URL'),
     getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
     {
+      global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
       cookies: {
         getAll() {
           return cookieStore.getAll();

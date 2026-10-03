@@ -4,8 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/permissions';
 import { computeGoalsAndMetrics, getDashboardClients } from '@/lib/goals';
-import { fetchClientOptions } from '@/lib/data';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { GoalProgressCard } from '@/components/GoalProgressCard';
 import { GaugeCard } from '@/components/GaugeCard';
 import { StageBarChart } from '@/components/StageBarChart';
@@ -26,10 +25,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const period = normalizePeriod(searchParams?.period || currentMonth());
   const supabase = createServerSupabaseClient();
 
-  const [metrics, top, clients, atRiskRes] = await Promise.all([
+  const [metrics, top, atRiskRes] = await Promise.all([
     computeGoalsAndMetrics(period),
     getDashboardClients(period),
-    fetchClientOptions({ userRole: user.role, limit: 4 }),
     supabase
       .from('client_health_snapshots')
       .select('client_id, score, risk, ai_summary, computed_at, clients(id, name, status)')
@@ -39,18 +37,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   ]);
 
   const atRisk = atRiskRes.data;
-  const sidebarClients = clients.map((c) => ({
-    id: c.id,
-    name: c.name,
-    monthlyFee: c.monthlyFee,
-  }));
 
   return (
-    <AppShell
+    <PageChrome
+      pathname="/dashboard"
+      period={period}
       user={user}
       title="Cockpit"
       subtitle={`${periodLabel(period)} • ${user.role === 'admin' ? 'Agency-wide' : 'Your accounts'}`}
-      topClients={sidebarClients}
       monthlyViews={metrics.views.actual}
     >
       <div className={user.role === 'admin' ? 'grid-responsive-5' : 'grid-responsive-4'} style={{ marginBottom: 18 }}>
@@ -174,7 +168,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </div>
         </div>
       </div>
-    </AppShell>
+    </PageChrome>
   );
 }
 

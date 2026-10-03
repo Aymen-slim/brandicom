@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { notifyWorkspaceChange } from '@/lib/workspaceEvents';
 import Link from 'next/link';
 import { ClientData, DeliverableData, MessageData, UserSummary } from '@/types';
 import { ClientDetailHeader } from './ClientDetailHeader';
@@ -39,6 +40,31 @@ export function ClientWorkspace({
   const [currentClient, setCurrentClient] = useState<ClientData>(client);
   const [tab, setTab] = useState<Tab>('overview');
   const [deliverables, setDeliverables] = useState(initialDeliverables);
+  const [contentLoading, setContentLoading] = useState(true);
+  const [contentError, setContentError] = useState('');
+  const [contentRevision, setContentRevision] = useState(0);
+  useEffect(() => setCurrentClient(client), [client]);
+  useEffect(() => setDeliverables(initialDeliverables), [initialDeliverables]);
+  useEffect(() => {
+    if (tab !== 'content') return;
+    const controller = new AbortController();
+    const read = async () => {
+      setContentLoading(true);
+      setContentError('');
+      try {
+        const res = await fetch(`/api/clients/${client.id}/deliverables`, { signal: controller.signal, cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not load client content');
+        const rows: DeliverableData[] = await res.json();
+        if (!controller.signal.aborted) setDeliverables(rows);
+      } catch (err) {
+        if (!controller.signal.aborted) setContentError(err instanceof Error ? err.message : 'Could not load client content');
+      } finally {
+        if (!controller.signal.aborted) setContentLoading(false);
+      }
+    };
+    void read();
+    return () => controller.abort();
+  }, [tab, client.id, initialDeliverables, contentRevision]);
   const [metricsFor, setMetricsFor] = useState<DeliverableData | null>(null);
   const [ideas, setIdeas] = useState<any[] | null>(null);
   const [ideasBusy, setIdeasBusy] = useState(false);
@@ -302,10 +328,11 @@ export function ClientWorkspace({
 
   const refreshDeliverables = async () => {
     try {
-      const res = await fetch(`/api/clients/${currentClient.id}/deliverables`);
+      const res = await fetch(`/api/clients/${currentClient.id}/deliverables`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setDeliverables(data);
+        notifyWorkspaceChange('posting');
       }
     } catch (err) {
       console.error('Failed to refresh deliverables:', err);
@@ -450,6 +477,7 @@ export function ClientWorkspace({
               type="button"
               className={`btn btn-sm ${tab === t.id ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => {
+                if (t.id === 'content' && tab !== 'content') setContentLoading(true);
                 setTab(t.id);
                 if (t.id === 'finance') loadFinance();
               }}
@@ -565,12 +593,9 @@ export function ClientWorkspace({
               ))}
             </div>
           )}
-          <DeliverableTracker
-            clientId={currentClient.id}
-            initialDeliverables={deliverables}
-            availableCreators={availableCreators}
-            onUpdate={refreshDeliverables}
-          />
+          {contentLoading ? <div role="status" className="glass-card" style={{ padding: 20 }}>Loading content...</div>
+            : contentError ? <div role="alert" className="glass-card" style={{ padding: 20 }}>{contentError} <button className="btn btn-secondary btn-sm" onClick={() => setContentRevision((previous) => previous + 1)}>Retry</button></div>
+            : <DeliverableTracker clientId={currentClient.id} initialDeliverables={deliverables} availableCreators={availableCreators} onUpdate={refreshDeliverables} />}
           <div className="glass-card" style={{ padding: 16 }}>
             <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 13 }}>Update engagement</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>

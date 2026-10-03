@@ -2,38 +2,37 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/permissions';
 import { fetchClientOptions, fetchCalendarDeliverables, fetchCreatorOptions } from '@/lib/data';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { ContentCalendar } from '@/components/ContentCalendar';
+import { getCalendarRange, localDateKey } from '@/lib/calendarRange';
 
 export default async function CalendarPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
 
+  const initialDate = localDateKey(new Date());
+  const range = getCalendarRange(new Date(`${initialDate}T12:00:00`));
   const [clients, deliverables, creators] = await Promise.all([
-    fetchClientOptions({ userRole: user.role, includeLogo: true }),
-    fetchCalendarDeliverables({ lightweight: true }),
+    fetchClientOptions({ userRole: user.role, includeLogo: true, includeFee: false }),
+    fetchCalendarDeliverables({ lightweight: true, ...range }),
     fetchCreatorOptions(),
   ]);
 
-  const topClients = clients.slice(0, 5).map((c) => ({
-    id: c.id,
-    name: c.name,
-    monthlyFee: c.monthlyFee,
-  }));
-
   return (
-    <AppShell
+    <PageChrome
+      pathname="/calendar"
       user={user}
       title="Content Calendar"
       subtitle="Manage filming shoots and posting schedules across all clients"
-      topClients={topClients}
     >
       <ContentCalendar
         initialDeliverables={deliverables}
+        initialDate={initialDate}
+        initialRange={range}
         clients={clients}
         creators={creators}
         userRole={user.role}
       />
-    </AppShell>
+    </PageChrome>
   );
 }

@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser, isAdmin } from '@/lib/permissions';
 import { fetchInvoice } from '@/lib/finance';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { InvoiceDetail } from '@/components/InvoiceDetail';
 
 export default async function InvoicePage({ params }: { params: { id: string } }) {
@@ -14,7 +14,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
   if (!detail) notFound();
 
   return (
-    <AppShell
+    <PageChrome pathname={`/finance/invoices/${params.id}`}
       user={user}
       title={detail.invoice.number}
       subtitle={detail.invoice.clientName || 'Invoice'}
@@ -24,7 +24,7 @@ export default async function InvoicePage({ params }: { params: { id: string } }
         </Link>
       }
     >
-      <InvoiceDetail invoice={detail.invoice} payments={detail.payments} />
-    </AppShell>
+      <InvoiceDetail key={params.id} invoice={detail.invoice} payments={detail.payments} />
+    </PageChrome>
   );
 }

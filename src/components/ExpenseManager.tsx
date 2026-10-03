@@ -1,6 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { ListPagination, useListFilters } from './ListPagination';
+import type { PageResult } from '@/lib/pagination';
+import type { ExpenseListSummary } from '@/lib/finance';
 import { ExpenseCategory, ExpenseData } from '@/types';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { formatMoney } from '@/lib/format';
@@ -9,19 +13,33 @@ interface ExpenseManagerProps {
   initialExpenses: ExpenseData[];
   clients: Array<{ id: string; name: string }>;
   partners: Array<{ id: string; name: string }>;
+  pagination?: PageResult<ExpenseData>;
+  summary?: ExpenseListSummary;
+  initialFilters?: { type?: 'all' | 'one_time' | 'regular'; category?: string; clientId?: string; search?: string };
 }
 
 export function ExpenseManager({
   initialExpenses,
   clients,
   partners,
+  pagination,
+  summary,
+  initialFilters = {},
 }: ExpenseManagerProps) {
+  const router = useRouter();
   const [expenses, setExpenses] = useState<ExpenseData[]>(initialExpenses);
+  useEffect(() => setExpenses(initialExpenses), [initialExpenses]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [activeTypeTab, setActiveTypeTab] = useState<'all' | 'one_time' | 'regular'>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [selectedClient, setSelectedClient] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTypeTab, setActiveTypeTab] = useState<'all' | 'one_time' | 'regular'>(initialFilters.type || 'all');
+  const [selectedCategory, setSelectedCategory] = useState(initialFilters.category || 'all');
+  const [selectedClient, setSelectedClient] = useState(initialFilters.clientId || 'all');
+  const [searchQuery, setSearchQuery] = useState(initialFilters.search || '');
+  const pending = useListFilters({ type: activeTypeTab, category: selectedCategory, clientId: selectedClient, search: searchQuery },
+    { type: initialFilters.type || 'all', category: initialFilters.category || 'all', clientId: initialFilters.clientId || 'all', search: initialFilters.search || '' },
+    (values) => {
+      setActiveTypeTab(values.type === 'regular' || values.type === 'one_time' ? values.type : 'all');
+      setSelectedCategory(values.category || 'all'); setSelectedClient(values.clientId || 'all'); setSearchQuery(values.search || '');
+    });
 
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -91,6 +109,7 @@ export function ExpenseManager({
       };
 
       setExpenses((prev) => [newExpense, ...prev]);
+      router.refresh();
       setForm((prev) => ({
         ...prev,
         amount: '',
@@ -111,6 +130,7 @@ export function ExpenseManager({
       const res = await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setExpenses((prev) => prev.filter((e) => e.id !== id));
+        router.refresh();
       } else {
         alert('Failed to delete expense.');
       }
@@ -121,6 +141,7 @@ export function ExpenseManager({
 
   // KPI Calculations
   const stats = useMemo(() => {
+    if (summary) return summary;
     const totalAmount = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
     const oneTimeExpenses = expenses.filter((e) => !e.recurring);
     const oneTimeAmount = oneTimeExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
@@ -143,10 +164,11 @@ export function ExpenseManager({
       regularCount: regularExpenses.length,
       regularMonthlyRunrate,
     };
-  }, [expenses]);
+  }, [expenses, summary]);
 
   // Filtering
   const filteredExpenses = useMemo(() => {
+    if (pagination) return expenses;
     return expenses.filter((e) => {
       // Type Tab Filter
       if (activeTypeTab === 'one_time' && e.recurring) return false;
@@ -170,10 +192,11 @@ export function ExpenseManager({
 
       return true;
     });
-  }, [expenses, activeTypeTab, selectedCategory, selectedClient, searchQuery]);
+  }, [expenses, activeTypeTab, selectedCategory, selectedClient, searchQuery, pagination]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div aria-busy={pending} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {pending && <div role="status" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Updating expenses...</div>}
       {/* Top Metrics Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <div className="glass-card" style={{ padding: '16px 20px', borderRadius: 12 }}>
@@ -598,6 +621,7 @@ export function ExpenseManager({
           </table>
         </div>
       </div>
+      {pagination && <ListPagination result={pagination} />}
     </div>
   );
 }

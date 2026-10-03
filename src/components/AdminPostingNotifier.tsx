@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { DeliverableData, UserSummary } from '@/types';
 import {
@@ -28,9 +28,6 @@ interface AlertData {
   unreadCount: number;
 }
 
-const ALERT_TTL_MS = 45_000;
-let alertCache: { at: number; data: AlertData } | null = null;
-
 export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
   const isAdmin = user?.role === 'admin';
   const [data, setData] = useState<AlertData | null>(null);
@@ -39,72 +36,78 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
   const [showBriefingModal, setShowBriefingModal] = useState(false);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef<AbortController | null>(null);
 
-  const fetchAlerts = async () => {
-    if (!isAdmin) return;
-    if (alertCache && Date.now() - alertCache.at < ALERT_TTL_MS) {
-      setData(alertCache.data);
-      return;
-    }
+  const fetchAlerts = useCallback(async () => {
+    if (!isAdmin || document.visibilityState !== 'visible') return;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
       setLoading(true);
       const res = await fetch('/api/notifications/posting-alerts', {
-        credentials: 'same-origin',
+        credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
       });
-      if (res.status === 401) {
+      if (controller.signal.aborted) return;
+      if (res.status === 401 || res.status === 403) {
+        setData(null);
+        setShowDropdown(false);
+        setShowBriefingModal(false);
         return;
       }
       if (res.ok) {
         const json: AlertData = await res.json();
-        alertCache = { at: Date.now(), data: json };
+        if (controller.signal.aborted) return;
         setData(json);
 
         // Check if briefing should be shown "first thing" when on site
         const todayStr = new Date().toISOString().split('T')[0];
-        const sessionKey = `admin_briefing_seen_${todayStr}`;
+        const sessionKey = `admin_briefing_seen_${user?.id}_${todayStr}`;
         const hasSeenSession = sessionStorage.getItem(sessionKey);
-
         const totalUrgent = (json.todayPosts?.length || 0) + (json.overduePosts?.length || 0);
-
         if (!hasSeenSession && totalUrgent > 0) {
           setShowBriefingModal(true);
           sessionStorage.setItem(sessionKey, 'true');
         }
       }
     } catch (err) {
-      console.warn('Could not fetch posting alerts:', err);
+      if (!controller.signal.aborted) console.warn('Could not fetch posting alerts:', err);
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
-  };
+  }, [isAdmin, user?.id]);
 
   useEffect(() => {
+    setData(null);
+    setShowDropdown(false);
+    setShowBriefingModal(false);
     let idleId = 0;
     let timerId = 0;
     if (isAdmin) {
-      if (typeof window.requestIdleCallback === 'function') {
-        idleId = window.requestIdleCallback(() => {
-          fetchAlerts();
-        });
-      } else {
-        timerId = window.setTimeout(() => {
-          fetchAlerts();
-        }, 300);
-      }
+      if (typeof window.requestIdleCallback === 'function') idleId = window.requestIdleCallback(() => { void fetchAlerts(); });
+      else timerId = window.setTimeout(() => { void fetchAlerts(); }, 300);
     }
-
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setShowDropdown(false);
     };
+    const onChange = (event: Event) => {
+      if ((event as CustomEvent).detail?.scope === 'posting') void fetchAlerts();
+    };
+    const onFocus = () => { void fetchAlerts(); };
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('workspace:data-changed', onChange);
     return () => {
       if (idleId) window.cancelIdleCallback(idleId);
       if (timerId) window.clearTimeout(timerId);
+      requestRef.current?.abort();
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('workspace:data-changed', onChange);
     };
-  }, [isAdmin]);
+  }, [isAdmin, fetchAlerts]);
 
   const handleMarkPublished = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -127,9 +130,9 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
             overduePosts: overdueFiltered,
             unreadCount: Math.max(0, prev.unreadCount - 1),
           };
-          alertCache = { at: Date.now(), data: next };
           return next;
         });
+        void fetchAlerts();
       }
     } catch (err) {
       console.error('Error marking published:', err);
@@ -146,7 +149,7 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       {/* 1. Header Notification Bell */}
       <button
-        onClick={() => setShowDropdown(!showDropdown)}
+        onClick={() => { if (!showDropdown) void fetchAlerts(); setShowDropdown(!showDropdown); }}
         className="btn btn-ghost btn-sm"
         style={{
           position: 'relative',

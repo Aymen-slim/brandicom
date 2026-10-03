@@ -2,7 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/permissions';
 import { fetchUsersWithCounts, fetchGoals } from '@/lib/data';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { SettingsManager } from '@/components/SettingsManager';
 
 export default async function SettingsPage() {
@@ -17,12 +17,12 @@ export default async function SettingsPage() {
   ]);
 
   return (
-    <AppShell
+    <PageChrome pathname="/settings"
       user={user}
       title="Agency Settings & Governance"
       subtitle="Team access and performance goal targets"
     >
       <SettingsManager initialUsers={users} initialGoals={goals} user={user} />
-    </AppShell>
+    </PageChrome>
   );
 }

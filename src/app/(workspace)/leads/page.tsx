@@ -2,7 +2,7 @@ import React from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionUser, isAdmin } from '@/lib/permissions';
 import { fetchContactSubmissions } from '@/lib/submissions';
-import { AppShell } from '@/components/AppShell';
+import { PageChrome } from '@/components/PageChrome';
 import { SubmissionInbox } from '@/components/SubmissionInbox';
 
 export default async function LeadsPage() {
@@ -20,7 +20,7 @@ export default async function LeadsPage() {
   }
 
   return (
-    <AppShell
+    <PageChrome pathname="/leads"
       user={user}
       title="Website leads"
       subtitle="Every contact form submitted on the site"
@@ -32,6 +32,6 @@ export default async function LeadsPage() {
       ) : (
         <SubmissionInbox submissions={submissions} />
       )}
-    </AppShell>
+    </PageChrome>
   );
 }

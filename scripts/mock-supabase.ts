@@ -99,7 +99,7 @@ function applyFilters(rows: any[], params: URLSearchParams): any[] {
   const keys = Array.from(new Set(Array.from(params.keys())));
   for (const key of keys) {
     const value = params.get(key)!;
-    if (RESERVED.has(key)) continue;
+    if (RESERVED.has(key) || key.endsWith('.order') || key.endsWith('.limit')) continue;
     if (key === 'or' || key.endsWith('.or')) {
       out = out.filter((row) => matchOr(row, value));
       continue;

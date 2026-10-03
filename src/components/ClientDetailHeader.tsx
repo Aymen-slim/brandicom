@@ -49,6 +49,7 @@ export function ClientDetailHeader({
   const isAdmin = user?.role === 'admin';
 
   const [client, setClient] = useState<ClientData>(initialClient);
+  useEffect(() => setClient(initialClient), [initialClient]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -416,6 +417,7 @@ export function ClientDetailHeader({
       });
       if (res.ok) {
         router.push('/clients');
+        router.refresh();
       }
     } catch (err) {
       console.error('Failed to delete client:', err);

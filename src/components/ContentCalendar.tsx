@@ -1,6 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { getCalendarRange, isInCalendarRange, CalendarRange } from '@/lib/calendarRange';
+import { notifyWorkspaceChange } from '@/lib/workspaceEvents';
+import type { PageResult } from '@/lib/pagination';
 import Link from 'next/link';
 import { DeliverableData, ClientOption, CreatorOption, Platform, DeliverableFormat, DeliverableStatus } from '@/types';
 import { getProxiedImageUrl } from '@/lib/format';
@@ -32,6 +35,8 @@ interface ContentCalendarProps {
   clients: ClientOption[];
   creators: CreatorOption[];
   userRole: string;
+  initialDate: string;
+  initialRange: CalendarRange;
 }
 
 type EventTypeFilter = 'all' | 'filming' | 'posting';
@@ -115,14 +120,71 @@ export function ContentCalendar({
   clients,
   creators,
   userRole,
+  initialDate,
+  initialRange,
 }: ContentCalendarProps) {
   const [deliverables, setDeliverables] = useState<DeliverableData[]>(initialDeliverables);
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [monthDeliverables, setMonthDeliverables] = useState(initialDeliverables);
+  const [currentDate, setCurrentDate] = useState(() => new Date(`${initialDate}T12:00:00`));
   const [viewMode, setViewMode] = useState<CalendarView>('month');
   const [eventTypeFilter, setEventTypeFilter] = useState<EventTypeFilter>('all');
   const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState('');
+  const [historyPage, setHistoryPage] = useState(1);
+  const [history, setHistory] = useState<PageResult<DeliverableData>>({ items: [], total: 0, page: 1, pageSize: 100 });
+  const [revision, setRevision] = useState(0);
+  const initialRead = useRef(true);
+  const serverRows = useRef(initialDeliverables);
+  const range = getCalendarRange(currentDate);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const useServerRows = initialRead.current || serverRows.current !== initialDeliverables;
+    initialRead.current = false;
+    serverRows.current = initialDeliverables;
+    const read = async () => {
+      setDataLoading(true);
+      setDataError('');
+      try {
+        const params = new URLSearchParams({ from: range.from, to: range.to, lightweight: '1' });
+        let monthRows = initialDeliverables;
+        if (!useServerRows || range.from !== initialRange.from || range.to !== initialRange.to) {
+          const res = await fetch(`/api/deliverables?${params}`, { signal: controller.signal, cache: 'no-store' });
+          if (!res.ok) throw new Error('Could not load calendar events');
+          monthRows = await res.json();
+        }
+        if (controller.signal.aborted) return;
+        setMonthDeliverables(monthRows);
+        if (viewMode === 'agenda') {
+          const res = await fetch(`/api/deliverables?lightweight=1&page=${historyPage}&pageSize=100`, { signal: controller.signal, cache: 'no-store' });
+          if (!res.ok) throw new Error('Could not load event history');
+          const result: PageResult<DeliverableData> = await res.json();
+          if (controller.signal.aborted) return;
+          const items = Array.from(new Map([...(historyPage === 1 ? [] : history.items), ...result.items].map((row) => [row.id, row])).values());
+          setHistory({ ...result, items });
+          setDeliverables(Array.from(new Map([...items, ...monthRows].map((row) => [row.id, row])).values()));
+        } else setDeliverables(monthRows);
+      } catch (err) {
+        if (!controller.signal.aborted) setDataError(err instanceof Error ? err.message : 'Could not load calendar events');
+      } finally {
+        if (!controller.signal.aborted) setDataLoading(false);
+      }
+    };
+    void read();
+    return () => controller.abort();
+  }, [range.from, range.to, initialRange.from, initialRange.to, initialDeliverables, viewMode, historyPage, revision]);
+
+  const applyUpdate = (row: DeliverableData) => {
+    const merge = (rows: DeliverableData[]) => rows.some((item) => item.id === row.id)
+      ? rows.map((item) => item.id === row.id ? row : item) : [row, ...rows];
+    setMonthDeliverables((previous) => merge(previous).filter((item) => isInCalendarRange(item, range)));
+    setDeliverables((previous) => merge(previous).filter((item) => viewMode === 'agenda' || isInCalendarRange(item, range)));
+    setHistory((previous) => ({ ...previous, items: previous.items.map((item) => item.id === row.id ? row : item) }));
+    notifyWorkspaceChange('posting');
+  };
 
   // Selected event for quick edit drawer/modal
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
@@ -357,44 +419,27 @@ export function ContentCalendar({
 
   // Summary KPIs for current month
   const monthlyStats = useMemo(() => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-
+    const prefix = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-`;
     let filmingCount = 0;
     let filmedCompleted = 0;
     let postingCount = 0;
     let postedCompleted = 0;
     let overdueCount = 0;
-
-    deliverables.forEach((d) => {
-      if (d.filmingDate) {
-        const fDate = new Date(d.filmingDate);
-        if (fDate.getFullYear() === year && fDate.getMonth() === month) {
-          filmingCount++;
-          if (d.filmed) filmedCompleted++;
-          else if (d.filmingDate < todayStr) overdueCount++;
-        }
+    monthDeliverables.forEach((d) => {
+      if (d.filmingDate?.startsWith(prefix)) {
+        filmingCount++;
+        if (d.filmed) filmedCompleted++;
+        else if (d.filmingDate < todayStr) overdueCount++;
       }
-      if (d.publishDate) {
-        const pDate = new Date(d.publishDate);
-        if (pDate.getFullYear() === year && pDate.getMonth() === month) {
-          postingCount++;
-          if (d.published) postedCompleted++;
-          else if (d.publishDate < todayStr) overdueCount++;
-        }
+      if (d.publishDate?.startsWith(prefix)) {
+        postingCount++;
+        if (d.published) postedCompleted++;
+        else if (d.publishDate < todayStr) overdueCount++;
       }
     });
-
-    return {
-      filmingCount,
-      filmedCompleted,
-      filmingPending: filmingCount - filmedCompleted,
-      postingCount,
-      postedCompleted,
-      postingPending: postingCount - postedCompleted,
-      overdueCount,
-    };
-  }, [deliverables, currentDate, todayStr]);
+    return { filmingCount, filmedCompleted, filmingPending: filmingCount - filmedCompleted,
+      postingCount, postedCompleted, postingPending: postingCount - postedCompleted, overdueCount };
+  }, [monthDeliverables, currentDate, todayStr]);
 
   // Open event editor
   const handleEventClick = (evt: CalendarEvent) => {
@@ -464,9 +509,7 @@ export function ContentCalendar({
       });
       if (res.ok) {
         const updated = await res.json();
-        setDeliverables((prev) =>
-          prev.map((d) => (d.id === updated.id ? { ...d, ...updated, clientName: evt.clientName } : d))
-        );
+        applyUpdate({ ...evt.deliverable, ...updated, clientName: evt.clientName });
       }
     } catch (err) {
       console.error('Failed to toggle completion:', err);
@@ -510,9 +553,7 @@ export function ContentCalendar({
       }
 
       const updated = await res.json();
-      setDeliverables((prev) =>
-        prev.map((d) => (d.id === updated.id ? { ...d, ...updated, clientName: selectedEvent.clientName } : d))
-      );
+      applyUpdate({ ...selectedEvent.deliverable, ...updated, clientName: selectedEvent.clientName });
       setSelectedEvent(null);
     } catch (err: any) {
       alert(err.message || 'Error updating deliverable');
@@ -564,7 +605,7 @@ export function ContentCalendar({
 
       const created = await res.json();
       const client = clients.find((c) => c.id === createFormData.clientId);
-      setDeliverables((prev) => [{ ...created, clientName: client?.name || 'Client' }, ...prev]);
+      applyUpdate({ ...created, clientName: client?.name || 'Client' });
       setShowCreateModal(false);
       setCreateFormData({
         clientId: clients[0]?.id || '',
@@ -589,7 +630,9 @@ export function ContentCalendar({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+    <div aria-busy={dataLoading} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {dataLoading && <div role="status" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Loading calendar events...</div>}
+      {dataError && <div role="alert" className="glass-card" style={{ padding: 12 }}>{dataError} <button className="btn btn-secondary btn-sm" onClick={() => setRevision((previous) => previous + 1)}>Retry</button></div>}
       {/* 1. Header KPI Cards */}
       <div
         style={{
@@ -856,7 +899,7 @@ export function ContentCalendar({
               Week
             </button>
             <button
-              onClick={() => setViewMode('agenda')}
+              onClick={() => { setHistoryPage(1); setViewMode('agenda'); }}
               className={`btn btn-sm ${viewMode === 'agenda' ? 'btn-primary' : 'btn-ghost'}`}
               style={{ fontSize: '11.5px', padding: '5px 9px' }}
             >
@@ -1485,6 +1528,10 @@ export function ContentCalendar({
             )}
           </div>
         </div>
+      )}
+
+      {viewMode === 'agenda' && history.items.length < history.total && (
+        <button className="btn btn-secondary" disabled={dataLoading} onClick={() => setHistoryPage((previous) => previous + 1)}>Load more event history</button>
       )}
 
       {/* 4. EVENT DETAIL & RESCHEDULE MODAL */}

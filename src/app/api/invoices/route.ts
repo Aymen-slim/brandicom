@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enforceAdmin } from '@/lib/permissions';
-import { createInvoice, fetchInvoices } from '@/lib/finance';
+import { createInvoice, fetchInvoices, fetchInvoicePage } from '@/lib/finance';
+import { z } from 'zod';
+import { parsePagination } from '@/lib/pagination';
+import { invoiceFiltersSchema, privateReadHeaders } from '@/lib/listValidation';
 
 export async function GET(request: NextRequest) {
   const { user, error } = await enforceAdmin();
@@ -9,9 +12,14 @@ export async function GET(request: NextRequest) {
   const status = request.nextUrl.searchParams.get('status') || undefined;
   const clientId = request.nextUrl.searchParams.get('clientId') || undefined;
   try {
-    const invoices = await fetchInvoices({ status, clientId });
-    return NextResponse.json(invoices);
+    const filters = invoiceFiltersSchema.parse({ status, clientId });
+    const sp = request.nextUrl.searchParams;
+    const invoices = sp.has('page') || sp.has('pageSize')
+      ? await fetchInvoicePage({ ...filters, ...parsePagination({ page: sp.get('page') || undefined, pageSize: sp.get('pageSize') || undefined }) })
+      : await fetchInvoices(filters);
+    return NextResponse.json(invoices, { headers: privateReadHeaders });
   } catch (err: any) {
+    if (err instanceof z.ZodError) return NextResponse.json({ error: 'Invalid invoice parameters' }, { status: 400, headers: privateReadHeaders });
     console.error('Error fetching invoices:', err);
     return NextResponse.json({ error: 'Failed to fetch invoices' }, { status: 500 });
   }

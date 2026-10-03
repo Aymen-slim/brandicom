@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { enforceAdmin } from '@/lib/permissions';
-import { createExpense, fetchExpenses } from '@/lib/finance';
+import { createExpense, fetchExpenses, fetchExpensePage } from '@/lib/finance';
+import { z } from 'zod';
+import { parsePagination } from '@/lib/pagination';
+import { expenseFiltersSchema, privateReadHeaders } from '@/lib/listValidation';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 import { ExpenseCategory } from '@/types';
 
@@ -9,14 +12,14 @@ export async function GET(request: NextRequest) {
   if (error || !user) return error;
   const sp = request.nextUrl.searchParams;
   try {
-    const expenses = await fetchExpenses({
-      category: sp.get('category') || undefined,
-      clientId: sp.get('clientId') || undefined,
-      from: sp.get('from') || undefined,
-      to: sp.get('to') || undefined,
-    });
-    return NextResponse.json(expenses);
+    const filters = expenseFiltersSchema.parse({ category: sp.get('category') || undefined, clientId: sp.get('clientId') || undefined,
+      from: sp.get('from') || undefined, to: sp.get('to') || undefined, search: sp.get('search') || undefined, type: sp.get('type') || undefined });
+    const expenses = sp.has('page') || sp.has('pageSize')
+      ? await fetchExpensePage({ ...filters, ...parsePagination({ page: sp.get('page') || undefined, pageSize: sp.get('pageSize') || undefined }) })
+      : await fetchExpenses(filters);
+    return NextResponse.json(expenses, { headers: privateReadHeaders });
   } catch (err: any) {
+    if (err instanceof z.ZodError) return NextResponse.json({ error: 'Invalid expense parameters' }, { status: 400, headers: privateReadHeaders });
     console.error('Error fetching expenses:', err);
     return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 });
   }

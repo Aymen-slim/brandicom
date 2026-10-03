@@ -1,6 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { ListPagination } from './ListPagination';
+import type { PageResult } from '@/lib/pagination';
 import Link from 'next/link';
 import { InvoiceData } from '@/types';
 import { formatMoney } from '@/lib/format';
@@ -9,11 +12,15 @@ import { Plus, Trash2, Printer } from 'lucide-react';
 export function InvoiceManager({
   initialInvoices,
   clients,
+  pagination,
 }: {
   initialInvoices: InvoiceData[];
   clients: Array<{ id: string; name: string }>;
+  pagination?: PageResult<InvoiceData>;
 }) {
+  const router = useRouter();
   const [invoices, setInvoices] = useState(initialInvoices);
+  useEffect(() => setInvoices(initialInvoices), [initialInvoices]);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -37,6 +44,7 @@ export function InvoiceManager({
       const res = await fetch(`/api/invoices/${id}`, { method: 'DELETE' });
       if (res.ok) {
         setInvoices((prev) => prev.filter((i) => i.id !== id));
+        router.refresh();
       } else {
         alert('Erreur lors de la suppression.');
       }
@@ -65,6 +73,7 @@ export function InvoiceManager({
         const created = await res.json();
         setInvoices((prev) => [created, ...prev]);
         setOpen(false);
+        router.refresh();
       }
     } finally {
       setSaving(false);
@@ -281,6 +290,7 @@ export function InvoiceManager({
           </tbody>
         </table>
       </div>
+      {pagination && <ListPagination result={pagination} />}
     </div>
   );
 }

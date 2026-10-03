@@ -6,9 +6,11 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Compass, TrendingUp, Menu, Search, Sparkles } from 'lucide-react';
 import { PeriodPicker } from './PeriodPicker';
-import { AdminPostingNotifier } from './AdminPostingNotifier';
+import dynamic from 'next/dynamic';
 import { UserSummary } from '@/types';
 import { formatCompactNumber } from '@/lib/format';
+
+const AdminPostingNotifier = dynamic(() => import('./AdminPostingNotifier').then((mod) => mod.AdminPostingNotifier), { ssr: false });
 
 interface HeaderProps {
   title?: string;
@@ -144,7 +146,7 @@ export function Header({ title, subtitle, user, children, onToggleNav, monthlyVi
           </Suspense>
         )}
 
-        <AdminPostingNotifier user={user} />
+        {user?.role === 'admin' && <AdminPostingNotifier key={user.id} user={user} />}
         {children}
       </div>
     </header>

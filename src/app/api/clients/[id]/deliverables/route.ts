@@ -15,6 +15,7 @@ import {
   logActivity,
 } from '@/lib/data';
 import { maybeApplyResultsTaggedFormat, serializeDeliverableLinks } from '@/lib/deliverables';
+import { privateReadHeaders } from '@/lib/listValidation';
 
 export async function GET(
   _request: NextRequest,
@@ -31,7 +32,7 @@ export async function GET(
 
   try {
     const deliverables = await fetchDeliverables(clientId);
-    return NextResponse.json(deliverables);
+    return NextResponse.json(deliverables, { headers: privateReadHeaders });
   } catch (err: any) {
     console.error('Error fetching deliverables:', err);
     return NextResponse.json({ error: 'Failed to fetch deliverables' }, { status: 500 });

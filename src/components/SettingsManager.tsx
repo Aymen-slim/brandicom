@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { UserSummary } from '@/types';
+import { notifyWorkspaceChange } from '@/lib/workspaceEvents';
 import {
   Users,
   Target,
@@ -106,6 +107,7 @@ export function SettingsManager({ initialUsers, initialGoals, user }: SettingsMa
         setNewUserName('');
         setNewUserEmail('');
         setShowAddUser(false);
+        notifyWorkspaceChange('user');
       } else {
         const err = await res.json();
         setUserMsg({ type: 'error', text: err.error || 'Failed to create user.' });
@@ -174,6 +176,7 @@ export function SettingsManager({ initialUsers, initialGoals, user }: SettingsMa
           text: `Account for ${updated.name} updated successfully${editPassword ? ' (including new password)' : ''}.`,
         });
         setEditingUser(null);
+        notifyWorkspaceChange('user');
       } else {
         const err = await res.json();
         setEditError(err.error || 'Failed to update member.');
@@ -203,6 +206,7 @@ export function SettingsManager({ initialUsers, initialGoals, user }: SettingsMa
           text: `Member ${deletingUser.name} (${deletingUser.email}) has been permanently deleted.`,
         });
         setDeletingUser(null);
+        notifyWorkspaceChange('user');
       } else {
         const err = await res.json();
         setDeleteError(err.error || 'Failed to delete member.');
