@@ -6,9 +6,13 @@ import { PageChrome } from '@/components/PageChrome';
 import { ContentCalendar } from '@/components/ContentCalendar';
 import { getCalendarRange, localDateKey } from '@/lib/calendarRange';
 
-export default async function CalendarPage() {
+export default async function CalendarPage({ searchParams }: { searchParams?: { client?: string } }) {
   const user = await getSessionUser();
   if (!user) redirect('/login');
+  const requestedClient = searchParams?.client || '';
+  const initialClientId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestedClient)
+    ? requestedClient
+    : undefined;
 
   const initialDate = localDateKey(new Date());
   const range = getCalendarRange(new Date(`${initialDate}T12:00:00`));
@@ -32,6 +36,7 @@ export default async function CalendarPage() {
         clients={clients}
         creators={creators}
         userRole={user.role}
+        initialClientId={initialClientId}
       />
     </PageChrome>
   );

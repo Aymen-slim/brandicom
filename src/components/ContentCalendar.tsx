@@ -37,6 +37,7 @@ interface ContentCalendarProps {
   userRole: string;
   initialDate: string;
   initialRange: CalendarRange;
+  initialClientId?: string;
 }
 
 type EventTypeFilter = 'all' | 'filming' | 'posting';
@@ -103,6 +104,52 @@ const MONTH_NAMES = [
 
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+function byClientName(a: ClientOption, b: ClientOption): number {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+}
+
+function scheduleClientGroups(clients: ClientOption[]): { active: ClientOption[]; oneTime: ClientOption[]; pool: ClientOption[] } {
+  const active = clients.filter((client) => client.status === 'active').sort(byClientName);
+  const oneTime = clients.filter((client) => client.status === 'one_time').sort(byClientName);
+  const pool = active.length > 0 || oneTime.length > 0 ? [...active, ...oneTime] : [...clients].sort(byClientName);
+  return { active, oneTime, pool };
+}
+
+function firstScheduleClientId(clients: ClientOption[], preferred?: string): string {
+  const pool = scheduleClientGroups(clients).pool;
+  if (preferred && pool.some((client) => client.id === preferred)) return preferred;
+  return pool[0]?.id || '';
+}
+
+function ScheduleClientOption({ client, selected, onSelect }: { client: ClientOption; selected: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      onClick={onSelect}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        width: '100%',
+        textAlign: 'left',
+        padding: '6px 8px',
+        borderRadius: '8px',
+        border: selected ? '1px solid #111827' : '1px solid transparent',
+        backgroundColor: 'transparent',
+        color: '#111827',
+        fontSize: '13px',
+        fontWeight: selected ? 800 : 600,
+        cursor: 'pointer',
+      }}
+    >
+      <ClientLogo name={client.name} logoUrl={client.logoUrl} size={22} />
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{client.name}</span>
+    </button>
+  );
+}
+
 function ClientLogo({ name, logoUrl, size = 24 }: { name: string; logoUrl?: string | null; size?: number }) {
   const src = getProxiedImageUrl(logoUrl);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
@@ -122,13 +169,16 @@ export function ContentCalendar({
   userRole,
   initialDate,
   initialRange,
+  initialClientId,
 }: ContentCalendarProps) {
   const [deliverables, setDeliverables] = useState<DeliverableData[]>(initialDeliverables);
   const [monthDeliverables, setMonthDeliverables] = useState(initialDeliverables);
   const [currentDate, setCurrentDate] = useState(() => new Date(`${initialDate}T12:00:00`));
   const [viewMode, setViewMode] = useState<CalendarView>('month');
   const [eventTypeFilter, setEventTypeFilter] = useState<EventTypeFilter>('all');
-  const [selectedClientId, setSelectedClientId] = useState<string>('all');
+  const [selectedClientId, setSelectedClientId] = useState<string>(() =>
+    initialClientId && clients.some((client) => client.id === initialClientId) ? initialClientId : 'all'
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [dataLoading, setDataLoading] = useState(false);
@@ -220,7 +270,7 @@ export function ContentCalendar({
   // New Deliverable modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createFormData, setCreateFormData] = useState({
-    clientId: clients[0]?.id || '',
+    clientId: firstScheduleClientId(clients, initialClientId),
     idea: '',
     platform: 'both' as Platform,
     format: 'reel' as DeliverableFormat,
@@ -245,6 +295,9 @@ export function ContentCalendar({
     }
     return map;
   }, [clients]);
+
+  const scheduleClientList = useMemo(() => scheduleClientGroups(clients), [clients]);
+  const selectedScheduleClient = scheduleClientList.pool.find((client) => client.id === createFormData.clientId) || scheduleClientList.pool[0];
 
   // Compute all calendar events (both filming and posting)
   const allEvents = useMemo<CalendarEvent[]>(() => {
@@ -462,14 +515,19 @@ export function ContentCalendar({
   };
 
   // Open new deliverable modal for a clicked date
-  const handleDateClick = (dateStr: string) => {
+  const openCreateModal = (filmingDate: string) => {
     setCreateFormData((prev) => ({
       ...prev,
-      filmingDate: dateStr,
+      clientId: firstScheduleClientId(clients, selectedClientId !== 'all' ? selectedClientId : prev.clientId),
+      filmingDate,
       publishDate: '',
       publishTime: '',
     }));
     setShowCreateModal(true);
+  };
+
+  const handleDateClick = (dateStr: string) => {
+    openCreateModal(dateStr);
   };
 
   // Toggle event completion directly from calendar card
@@ -608,7 +666,7 @@ export function ContentCalendar({
       applyUpdate({ ...created, clientName: client?.name || 'Client' });
       setShowCreateModal(false);
       setCreateFormData({
-        clientId: clients[0]?.id || '',
+        clientId: firstScheduleClientId(clients, selectedClientId !== 'all' ? selectedClientId : undefined),
         idea: '',
         platform: 'both',
         format: 'reel',
@@ -909,14 +967,7 @@ export function ContentCalendar({
 
           {/* "+ Schedule" Button */}
           <button
-            onClick={() => {
-              setCreateFormData((prev) => ({
-                ...prev,
-                filmingDate: todayStr,
-                publishDate: '',
-              }));
-              setShowCreateModal(true);
-            }}
+            onClick={() => openCreateModal(todayStr)}
             className="btn btn-primary btn-sm"
             style={{ fontSize: '12px' }}
           >
@@ -1853,23 +1904,55 @@ export function ContentCalendar({
             </div>
 
             <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {/* Client Selection */}
+              {/* Active clients, then one-time clients */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: '4px' }}>
+                {selectedScheduleClient && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <ClientLogo name={selectedScheduleClient.name} logoUrl={selectedScheduleClient.logoUrl} size={36} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6b7280' }}>
+                        {selectedScheduleClient.status === 'one_time' ? 'One-time client' : selectedScheduleClient.status === 'active' ? 'Active client' : 'Client'}
+                      </div>
+                      <div style={{ fontSize: '15px', fontWeight: 800, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {selectedScheduleClient.name}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#4b5563', marginBottom: '8px' }}>
                   Select Client *
-                </label>
-                <select
-                  required
-                  value={createFormData.clientId}
-                  onChange={(e) => setCreateFormData({ ...createFormData, clientId: e.target.value })}
-                  className="input-field"
-                >
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                </div>
+                <div role="radiogroup" aria-label="Select Client" style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
+                  {scheduleClientList.active.map((client) => (
+                    <ScheduleClientOption
+                      key={client.id}
+                      client={client}
+                      selected={client.id === createFormData.clientId}
+                      onSelect={() => setCreateFormData({ ...createFormData, clientId: client.id })}
+                    />
                   ))}
-                </select>
+                  {scheduleClientList.active.length === 0 && scheduleClientList.oneTime.length === 0 && scheduleClientList.pool.map((client) => (
+                    <ScheduleClientOption
+                      key={client.id}
+                      client={client}
+                      selected={client.id === createFormData.clientId}
+                      onSelect={() => setCreateFormData({ ...createFormData, clientId: client.id })}
+                    />
+                  ))}
+                  {scheduleClientList.oneTime.length > 0 && (
+                    <div style={{ fontSize: '10px', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: '#6d28d9', padding: '6px 4px 0' }}>
+                      One-time
+                    </div>
+                  )}
+                  {scheduleClientList.oneTime.map((client) => (
+                    <ScheduleClientOption
+                      key={client.id}
+                      client={client}
+                      selected={client.id === createFormData.clientId}
+                      onSelect={() => setCreateFormData({ ...createFormData, clientId: client.id })}
+                    />
+                  ))}
+                </div>
               </div>
 
               {/* Concept / Idea */}
@@ -2125,7 +2208,7 @@ export function ContentCalendar({
                 <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary btn-sm">
                   Cancel
                 </button>
-                <button type="submit" disabled={creating} className="btn btn-primary btn-sm">
+                <button type="submit" disabled={creating || !createFormData.clientId} className="btn btn-primary btn-sm">
                   {creating ? 'Scheduling...' : 'Schedule Deliverable'}
                 </button>
               </div>

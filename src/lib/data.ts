@@ -27,8 +27,14 @@ import {
 } from '@/types';
 import { isClientStatus, normalizeClientStatus, sortClientsForDisplay, clientStatusSortKey } from './clientStatus';
 import { parsePagination, selectPage, PageResult } from './pagination';
-import { CalendarRange, isInCalendarRange } from './calendarRange';
+import { CalendarRange, isInCalendarRange, localDateKey } from './calendarRange';
 import { calendarRangeSchema } from './listValidation';
+import {
+  selectSilentClients,
+  SilenceClientInput,
+  SilencePostInput,
+  SilentClientAlert,
+} from './postingSilence';
 
 export { CLIENT_STATUSES, isClientStatus } from './clientStatus';
 export const CREATOR_ROLES: CreatorRole[] = [
@@ -967,6 +973,82 @@ export async function fetchAdminPostingAlerts(): Promise<{
   }
 }
 
+export async function fetchSilentClientAlerts(extraDismissed: string[] = []): Promise<SilentClientAlert[]> {
+  const supabase = createServerSupabaseClient();
+  const today = localDateKey(new Date());
+  const clientRows = await readAllRows<any>((from, to) =>
+    supabase
+      .from('clients')
+      .select('id, name, logo_url, start_date, created_at', { count: from === 0 ? 'exact' : undefined })
+      .eq('status', 'active')
+      .order('name', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to)
+  );
+
+  const clients: SilenceClientInput[] = clientRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    logoUrl: row.logo_url ?? null,
+    startDate: row.start_date ?? null,
+    createdAt: row.created_at,
+  }));
+  if (!clients.length) return [];
+
+  const postRows: any[] = [];
+  const ids = clients.map((client) => client.id);
+  for (let index = 0; index < ids.length; index += 80) {
+    const chunk = ids.slice(index, index + 80);
+    const rows = await readAllRows<any>((from, to) =>
+      supabase
+        .from('deliverables')
+        .select('client_id, published, status, publish_date, created_at', { count: from === 0 ? 'exact' : undefined })
+        .in('client_id', chunk)
+        .or('published.eq.true,status.eq.published')
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    );
+    postRows.push(...rows);
+  }
+
+  const posts: SilencePostInput[] = postRows.map((row) => ({
+    clientId: row.client_id,
+    published: Boolean(row.published),
+    status: row.status ?? null,
+    publishDate: row.publish_date ?? null,
+    createdAt: row.created_at ?? '',
+  }));
+
+  const dismissed = new Set(extraDismissed);
+  try {
+    const { data, error } = await supabase.from('posting_silence_dismissals').select('client_id, gap_key');
+    if (error) {
+      console.warn('[posting-silence] dismissals unavailable:', error.message);
+    } else {
+      for (const row of data || []) dismissed.add(`${row.client_id}:${row.gap_key}`);
+    }
+  } catch (err) {
+    console.warn('[posting-silence] dismissals unavailable:', err);
+  }
+
+  return selectSilentClients(clients, posts, today, dismissed);
+}
+
+export async function dismissSilentClientAlert(userId: string, clientId: string, gapKey: string): Promise<boolean> {
+  const supabase = createServerSupabaseClient();
+  const { error } = await supabase.from('posting_silence_dismissals').insert({
+    client_id: clientId,
+    gap_key: gapKey,
+    dismissed_by: userId,
+  });
+  if (!error || error.code === '23505') {
+    console.info(`[posting-silence] admin ${userId} closed alert for client ${clientId} (${gapKey})`);
+    return true;
+  }
+  console.warn('[posting-silence] could not store dismissal:', error.message);
+  return false;
+}
+
 export function fetchMessages(clientId: string, since?: string | null, before?: string | null, recent = false, cursorId?: string | null): Promise<MessageData[]> {
   return loadMessages(createServerSupabaseClient(), clientId, since, before, recent, cursorId);
 }
@@ -1064,7 +1146,7 @@ export async function fetchClientOptions(opts: {
   includeFee?: boolean;
 }): Promise<ClientOption[]> {
   const supabase = createServerSupabaseClient();
-  const fields = ['id', 'name'];
+  const fields = ['id', 'name', 'status'];
   if (opts.includeLogo) fields.push('logo_url');
   if (opts.userRole === 'admin' && opts.includeFee !== false) fields.push('client_contracts(monthly_fee)');
   const selectStr = fields.join(', ');
@@ -1087,7 +1169,13 @@ export async function fetchClientOptions(opts: {
       const contract = Array.isArray(contracts) ? contracts[0] : contracts;
       monthlyFee = contract?.monthly_fee != null ? Number(contract.monthly_fee) : null;
     }
-    return { id: row.id, name: row.name, logoUrl: row.logo_url ?? null, monthlyFee };
+    return {
+      id: row.id,
+      name: row.name,
+      logoUrl: row.logo_url ?? null,
+      monthlyFee,
+      status: normalizeClientStatus(row.status),
+    };
   });
 }
 

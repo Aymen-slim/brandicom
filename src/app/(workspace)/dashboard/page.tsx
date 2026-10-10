@@ -1,9 +1,13 @@
 import React, { Suspense } from 'react';
 import dynamic from 'next/dynamic';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/permissions';
 import { computeGoalsAndMetrics, getDashboardClients } from '@/lib/goals';
+import { fetchSilentClientAlerts } from '@/lib/data';
+import { parseSilenceDismissals, SILENCE_DISMISS_COOKIE } from '@/lib/postingSilence';
+import { SilentClientAlerts } from '@/components/SilentClientAlerts';
 import { PageChrome } from '@/components/PageChrome';
 import { GoalProgressCard } from '@/components/GoalProgressCard';
 import { GaugeCard } from '@/components/GaugeCard';
@@ -25,7 +29,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const period = normalizePeriod(searchParams?.period || currentMonth());
   const supabase = createServerSupabaseClient();
 
-  const [metrics, top, atRiskRes] = await Promise.all([
+  const silencePromise = user.role === 'admin'
+    ? fetchSilentClientAlerts(parseSilenceDismissals(cookies().get(SILENCE_DISMISS_COOKIE)?.value)).catch((err) => {
+        console.error('[posting-silence] failed to load dashboard alerts', err);
+        return [];
+      })
+    : Promise.resolve([]);
+
+  const [metrics, top, atRiskRes, silenceAlerts] = await Promise.all([
     computeGoalsAndMetrics(period),
     getDashboardClients(period),
     supabase
@@ -34,6 +45,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       .in('risk', ['medium', 'high'])
       .order('score', { ascending: true })
       .limit(5),
+    silencePromise,
   ]);
 
   const atRisk = atRiskRes.data;
@@ -47,6 +59,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       subtitle={`${periodLabel(period)} • ${user.role === 'admin' ? 'Agency-wide' : 'Your accounts'}`}
       monthlyViews={metrics.views.actual}
     >
+      {user.role === 'admin' && <SilentClientAlerts alerts={silenceAlerts} />}
       <div className={user.role === 'admin' ? 'grid-responsive-5' : 'grid-responsive-4'} style={{ marginBottom: 18 }}>
         {user.role === 'admin' && metrics.revenue ? (
           <GoalProgressCard title="Revenue received" actual={metrics.revenue.actual} target={metrics.revenue.target} isCurrency />

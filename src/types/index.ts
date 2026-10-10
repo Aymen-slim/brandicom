@@ -273,6 +273,7 @@ export interface ClientOption {
   name: string;
   logoUrl: string | null;
   monthlyFee: number | null;
+  status: ClientStatus;
 }
 
 export type CreatorOption = Pick<CreatorData, 'id' | 'name' | 'role'>;
