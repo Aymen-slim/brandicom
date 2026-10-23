@@ -192,7 +192,7 @@ export function ClientInspirationBoard({
 
   // Share inspiration into Client Team Chat
   const handleShareToChat = async (item: InspirationIdea) => {
-    const chatText = `💡 Inspiration ${item.format === 'reel' ? 'Reel' : 'Video'}: "${item.title}"\n${item.url}${item.notes ? `\nNotes: ${item.notes}` : ''}`;
+    const chatText = `Inspiration ${item.format === 'reel' ? 'reel' : 'video'}: "${item.title}"\n${item.url}${item.notes ? `\nNotes: ${item.notes}` : ''}`;
     if (onShareToChat) {
       onShareToChat(chatText);
     } else {
@@ -204,7 +204,7 @@ export function ClientInspirationBoard({
           body: JSON.stringify({ body: chatText }),
         });
         if (res.ok) {
-          alert('Inspiration idea shared into Client Team Chat!');
+          alert('Shared to client team chat.');
         }
       } catch (err) {
         console.error('Failed to share to chat:', err);

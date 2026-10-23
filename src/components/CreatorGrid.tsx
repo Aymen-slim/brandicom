@@ -163,34 +163,66 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
       <div
         className="glass-card"
         style={{
-          padding: '12px 18px',
+          padding: '14px 18px',
           marginBottom: '18px',
           display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '14px',
+          flexDirection: 'column',
+          gap: '12px',
         }}
       >
-        {/* Search */}
-        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: '180px' }}>
-          <Search
-            size={14}
-            color="var(--text-muted)"
-            style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
-          />
-          <input
-            type="text"
-            placeholder="Search by name, handle, or style..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="input-field"
-            style={{ paddingLeft: '32px' }}
-          />
+        {/* Top Row: Search + Available toggle + Add button */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          {/* Search */}
+          <div style={{ position: 'relative', flex: '1 1 260px', maxWidth: '420px', minWidth: '200px' }}>
+            <Search
+              size={14}
+              color="var(--text-muted)"
+              style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
+            />
+            <input
+              type="text"
+              placeholder="Search by name, handle, or style..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="input-field"
+              style={{ paddingLeft: '32px' }}
+            />
+          </div>
+
+          {/* Right side: Available toggle + Add button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: '#4b5563',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={onlyAvailable}
+                onChange={(e) => setOnlyAvailable(e.target.checked)}
+                style={{ accentColor: '#111827' }}
+              />
+              Available Only
+            </label>
+
+            {isAdmin && (
+              <button onClick={openCreateModal} className="btn btn-primary btn-sm">
+                <Plus size={13} />
+                Add Partner
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Role Tabs */}
-        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+        {/* Bottom Row: Role Tabs */}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid #f1f5f9' }}>
           {roles.map((r) => {
             const isActive = selectedRole === r.key;
             return (
@@ -204,36 +236,6 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
               </button>
             );
           })}
-        </div>
-
-        {/* Right side: Available toggle + Add button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '12px',
-              color: '#4b5563',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={onlyAvailable}
-              onChange={(e) => setOnlyAvailable(e.target.checked)}
-              style={{ accentColor: '#111827' }}
-            />
-            Available Only
-          </label>
-
-          {isAdmin && (
-            <button onClick={openCreateModal} className="btn btn-primary btn-sm">
-              <Plus size={13} />
-              Add Partner
-            </button>
-          )}
         </div>
       </div>
 
@@ -321,6 +323,7 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
                     <option value="ugc">UGC Creator</option>
                     <option value="presenter">Presenter / Host</option>
                     <option value="influencer">Influencer</option>
+                    <option value="agency">Agency</option>
                     <option value="editor">Editor</option>
                     <option value="designer">Designer</option>
                     <option value="model">Model</option>
@@ -372,13 +375,13 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '11px', color: '#4b5563', display: 'block', marginBottom: '4px', fontWeight: 600 }}>
-                    Day Rate ($ USD)
+                    Rate (TND)
                   </label>
                   <input
                     type="number"
                     value={formData.dayRate}
                     onChange={(e) => setFormData({ ...formData, dayRate: e.target.value })}
-                    placeholder="e.g. 1200"
+                    placeholder="e.g. 450"
                     className="input-field"
                   />
                 </div>
@@ -394,7 +397,11 @@ export function CreatorGrid({ initialCreators, isAdmin = false }: CreatorGridPro
                   >
                     <option value="day">per day</option>
                     <option value="half-day">per half-day</option>
-                    <option value="deliverable">per video/asset</option>
+                    <option value="video">per video</option>
+                    <option value="post">per post</option>
+                    <option value="reel">per reel</option>
+                    <option value="project">per project</option>
+                    <option value="deliverable">per deliverable</option>
                     <option value="hour">per hour</option>
                   </select>
                 </div>

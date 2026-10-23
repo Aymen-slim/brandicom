@@ -136,7 +136,7 @@ export function ClientWorkspace({
         setCurrentClient((prev) => ({ ...prev, ...data.client }));
       }
       setShowAddSnapshotModal(false);
-      setSocialSyncMessage(`Follower snapshot for ${snapshotMonthInput} saved!`);
+      setSocialSyncMessage(`Follower snapshot for ${snapshotMonthInput} saved.`);
     } catch (err: any) {
       alert(`Error saving snapshot: ${err.message}`);
     } finally {
@@ -215,7 +215,7 @@ export function ClientWorkspace({
       if (!patchRes.ok) throw new Error('Failed to save updated follower count');
       const updatedClient = await patchRes.json();
       setCurrentClient((prev) => ({ ...prev, ...updatedClient }));
-      setSocialSyncMessage(`Updated ${platform === 'instagram' ? 'Instagram' : 'TikTok'} followers: ${formatNumber(data.followers)}!`);
+      setSocialSyncMessage(`Updated ${platform === 'instagram' ? 'Instagram' : 'TikTok'} followers: ${formatNumber(data.followers)}.`);
       setTimeout(() => setSocialSyncMessage(null), 4000);
     } catch (err: any) {
       alert(`Sync error: ${err.message}`);
@@ -261,7 +261,7 @@ export function ClientWorkspace({
       const updatedClient = await patchRes.json();
       setCurrentClient((prev) => ({ ...prev, ...updatedClient }));
       setEditingBaselines(false);
-      setSocialSyncMessage('Follower baselines saved successfully!');
+      setSocialSyncMessage('Follower baselines saved.');
       setTimeout(() => setSocialSyncMessage(null), 4000);
     } catch (err: any) {
       alert(`Failed to save baselines: ${err.message}`);
@@ -506,68 +506,83 @@ export function ClientWorkspace({
 
       {tab === 'overview' && (
         <div className="grid-split-wide">
-          <div className="glass-card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Account brief</h3>
-            <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6 }}>
-              {currentClient.notes || 'No internal notes yet.'}
-            </p>
-            <div className="grid-responsive-2" style={{ marginTop: 16, gap: 8, fontSize: 12 }}>
-              <div>Contact: {currentClient.contactName || '—'} {currentClient.contactEmail || ''}</div>
-              <div>Phone: {currentClient.contactPhone || '—'}</div>
-              <div>Website: {currentClient.website || '—'}</div>
-              <div>Lead source: {currentClient.leadSource || '—'}</div>
+          <div className="glass-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Account brief</h3>
+              <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6 }}>
+                {currentClient.notes || 'No internal notes yet.'}
+              </p>
             </div>
-            {(currentClient.socialAccounts || []).length > 0 && (
-              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {currentClient.socialAccounts!.map((s) => (
+            <div
+              className="grid-responsive-2"
+              style={{
+                marginTop: 16,
+                paddingTop: 14,
+                borderTop: '1px solid #f1f5f9',
+                gap: 10,
+                fontSize: 12,
+              }}
+            >
+              <div>
+                <span style={{ color: '#9ca3af', fontWeight: 600, display: 'block', fontSize: 10.5, textTransform: 'uppercase' }}>Contact</span>
+                <span style={{ color: '#111827', fontWeight: 600 }}>{currentClient.contactName || '—'}</span>
+                {currentClient.contactEmail && (
+                  <span style={{ color: '#6b7280', marginLeft: 6 }}>{currentClient.contactEmail}</span>
+                )}
+              </div>
+              <div>
+                <span style={{ color: '#9ca3af', fontWeight: 600, display: 'block', fontSize: 10.5, textTransform: 'uppercase' }}>Phone</span>
+                <span style={{ color: '#111827', fontWeight: 500 }}>{currentClient.contactPhone || '—'}</span>
+              </div>
+              <div>
+                <span style={{ color: '#9ca3af', fontWeight: 600, display: 'block', fontSize: 10.5, textTransform: 'uppercase' }}>Website</span>
+                <span style={{ color: '#4f46e5', fontWeight: 500 }}>{currentClient.website || '—'}</span>
+              </div>
+              <div>
+                <span style={{ color: '#9ca3af', fontWeight: 600, display: 'block', fontSize: 10.5, textTransform: 'uppercase' }}>Lead source</span>
+                <span style={{ color: '#111827', fontWeight: 500 }}>{currentClient.leadSource || '—'}</span>
+              </div>
+            </div>
+          </div>
+          <div className="glass-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Health</h3>
+                {currentClient.health && (
                   <span
-                    key={s.id}
                     style={{
                       fontSize: 11,
-                      background: '#f3f4f6',
-                      padding: '3px 8px',
-                      borderRadius: 5,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      textTransform: 'capitalize',
+                      backgroundColor: currentClient.health.risk === 'high' ? '#ffe4e6' : currentClient.health.risk === 'medium' ? '#fffbeb' : '#ecfdf5',
+                      color: currentClient.health.risk === 'high' ? '#e11d48' : currentClient.health.risk === 'medium' ? '#d97706' : '#059669',
                     }}
                   >
-                    {s.platform === 'instagram' ? (
-                      <InstagramIcon size={12} color="#be185d" />
-                    ) : (
-                      <TikTokIcon size={12} color="#0f172a" />
-                    )}
-                    <span>{cleanSocialHandle(s.handle) || s.platform}</span>
-                    {s.followers ? <span>· {formatNumber(s.followers)}</span> : null}
-                    {s.initialFollowers != null && s.initialFollowers > 0 && s.followers != null && (
-                      <strong style={{ color: s.followers >= s.initialFollowers ? '#059669' : '#dc2626' }}>
-                        ({s.followers >= s.initialFollowers ? `+${formatNumber(s.followers - s.initialFollowers)}` : formatNumber(s.followers - s.initialFollowers)})
-                      </strong>
-                    )}
+                    {currentClient.health.risk} risk
                   </span>
-                ))}
+                )}
               </div>
-            )}
-          </div>
-          <div className="glass-card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Health</h3>
-            {currentClient.health ? (
-              <>
-                <div style={{ fontSize: 28, fontWeight: 800 }}>{currentClient.health.score}</div>
-                <div style={{ fontSize: 12, color: '#6b7280', textTransform: 'capitalize' }}>{currentClient.health.risk} risk</div>
-                <p style={{ fontSize: 13, marginTop: 10 }}>{currentClient.health.aiSummary}</p>
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: '#9ca3af' }}>No health snapshot yet.</p>
-            )}
-            <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={genReport}>
-              Generate monthly report
-            </button>
-            {report && (
-              <div style={{ marginTop: 12, fontSize: 13 }}>
-                <Markdown>{report}</Markdown>
-              </div>
-            )}
+              {currentClient.health ? (
+                <>
+                  <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.1, color: '#0f172a' }}>{currentClient.health.score}</div>
+                  <p style={{ fontSize: 13, color: '#4b5563', marginTop: 8, lineHeight: 1.55 }}>{currentClient.health.aiSummary}</p>
+                </>
+              ) : (
+                <p style={{ fontSize: 13, color: '#9ca3af' }}>No health snapshot yet.</p>
+              )}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={genReport}>
+                Generate monthly report
+              </button>
+              {report && (
+                <div style={{ marginTop: 12, fontSize: 13 }}>
+                  <Markdown>{report}</Markdown>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -652,7 +667,7 @@ export function ClientWorkspace({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {socialSyncMessage && (
                   <span style={{ fontSize: 11.5, color: '#047857', background: '#ecfdf5', padding: '4px 10px', borderRadius: 6, fontWeight: 600, border: '1px solid #a7f3d0' }}>
-                    ✓ {socialSyncMessage}
+                    {socialSyncMessage}
                   </span>
                 )}
                 <button
@@ -1709,7 +1724,7 @@ export function ClientWorkspace({
                     tags: data.tags || prev.tags,
                     inspirations: data.inspirations,
                   }));
-                  alert('Saved reel/video link to Inspiration Ideas!');
+                  alert('Saved to Inspiration Ideas.');
                 }
               } catch (err) {
                 console.error('Failed to save inspiration from chat:', err);

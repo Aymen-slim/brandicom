@@ -207,7 +207,7 @@ export function ExpenseManager({
 
         <div className="glass-card" style={{ padding: '16px 20px', borderRadius: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#0284c7', fontWeight: 600, marginBottom: 4 }}>
-            <span>⚡</span> One-time Expenses
+            One-time expenses
           </div>
           <div style={{ fontSize: 24, fontWeight: 700, color: '#0369a1' }}>{formatMoney(stats.oneTimeAmount)}</div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{stats.oneTimeCount} one-off purchases</div>
@@ -215,7 +215,7 @@ export function ExpenseManager({
 
         <div className="glass-card" style={{ padding: '16px 20px', borderRadius: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#7c3aed', fontWeight: 600, marginBottom: 4 }}>
-            <span>🔄</span> Regular Commitments
+            Regular commitments
           </div>
           <div style={{ fontSize: 24, fontWeight: 700, color: '#6d28d9' }}>{formatMoney(stats.regularMonthlyRunrate)}<span style={{ fontSize: 13, fontWeight: 500, color: '#8b5cf6' }}>/mo</span></div>
           <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>{stats.regularCount} recurring regular subscriptions</div>
@@ -255,7 +255,6 @@ export function ExpenseManager({
                   gap: 6,
                 }}
               >
-                <span>⚡</span>
                 <span>One-time</span>
               </button>
 
@@ -277,7 +276,6 @@ export function ExpenseManager({
                   gap: 6,
                 }}
               >
-                <span>🔄</span>
                 <span>Regular (Recurring)</span>
               </button>
             </div>
@@ -448,7 +446,7 @@ export function ExpenseManager({
               boxShadow: activeTypeTab === 'one_time' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
             }}
           >
-            ⚡ One-time ({stats.oneTimeCount})
+            One-time ({stats.oneTimeCount})
           </button>
           <button
             type="button"
@@ -465,7 +463,7 @@ export function ExpenseManager({
               boxShadow: activeTypeTab === 'regular' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none',
             }}
           >
-            🔄 Regular ({stats.regularCount})
+            Regular ({stats.regularCount})
           </button>
         </div>
 
@@ -554,7 +552,7 @@ export function ExpenseManager({
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          <span>🔄 Regular</span>
+                          <span>Regular</span>
                           <span style={{ opacity: 0.75, fontSize: 10 }}>({e.recurrence || 'monthly'})</span>
                         </span>
                       ) : (
@@ -573,7 +571,7 @@ export function ExpenseManager({
                             whiteSpace: 'nowrap',
                           }}
                         >
-                          <span>⚡ One-time</span>
+                          <span>One-time</span>
                         </span>
                       )}
                     </td>

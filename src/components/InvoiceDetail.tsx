@@ -150,7 +150,7 @@ export function InvoiceDetail({
         setAmount('');
         setAmountHT('');
         setReference('');
-        setPaymentSuccess(`✓ Règlement de ${formatMoney(numAmount)} enregistré avec succès !`);
+        setPaymentSuccess(`Règlement de ${formatMoney(numAmount)} enregistré.`);
         router.refresh();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -718,7 +718,7 @@ export function InvoiceDetail({
 
                 {paymentError && (
                   <div style={{ padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 12, fontWeight: 600 }}>
-                    ⚠️ {paymentError}
+                    {paymentError}
                   </div>
                 )}
 

@@ -2,7 +2,14 @@ export const CURRENCY = 'TND';
 export const CURRENCY_LOCALE = 'fr-TN';
 export const VAT_RATE = 0.19;
 
-const moneyFmt = new Intl.NumberFormat(CURRENCY_LOCALE, {
+const moneyIntFmt = new Intl.NumberFormat(CURRENCY_LOCALE, {
+  style: 'currency',
+  currency: CURRENCY,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+const moneyFracFmt = new Intl.NumberFormat(CURRENCY_LOCALE, {
   style: 'currency',
   currency: CURRENCY,
   minimumFractionDigits: 3,
@@ -15,7 +22,9 @@ export function formatMoney(value: number | string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
-  return moneyFmt.format(n).replace(/[\u202F\u00A0]/g, ' ');
+  const isWhole = Math.abs(n - Math.round(n)) < 0.0005;
+  const fmt = isWhole ? moneyIntFmt : moneyFracFmt;
+  return fmt.format(isWhole ? Math.round(n) : n).replace(/[\u202F\u00A0]/g, ' ');
 }
 
 /**

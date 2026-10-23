@@ -195,35 +195,35 @@ export function computeClientGoalsProgress(
   const isAdsSelected = selectedFormats.has('ads');
   const isOtherSelected = selectedFormats.has('other');
 
-  // 1. Reels
+  // Reels
   const reelsCounts = countFor((d) => d.format === 'reel');
   const reelsTarget = isReelsSelected ? goals.reels || 0 : 0;
   const reelsRemaining = Math.max(0, reelsTarget - reelsCounts.published);
   const reelsHit = reelsTarget === 0 || reelsCounts.published >= reelsTarget;
   const reelsPercent = reelsTarget > 0 ? Math.min(100, Math.round((reelsCounts.published / reelsTarget) * 100)) : (reelsCounts.published > 0 ? 100 : 0);
 
-  // 2. Posts (Photos & Carousels)
+  // Posts (Photos & Carousels)
   const postsCounts = countFor((d) => d.format === 'photo' || d.format === 'carousel');
   const postsTarget = isPostsSelected ? goals.posts || 0 : 0;
   const postsRemaining = Math.max(0, postsTarget - postsCounts.published);
   const postsHit = postsTarget === 0 || postsCounts.published >= postsTarget;
   const postsPercent = postsTarget > 0 ? Math.min(100, Math.round((postsCounts.published / postsTarget) * 100)) : (postsCounts.published > 0 ? 100 : 0);
 
-  // 3. Stories
+  // Stories
   const storiesCounts = countFor((d) => d.format === 'story');
   const storiesTarget = isStoriesSelected ? goals.stories || 0 : 0;
   const storiesRemaining = Math.max(0, storiesTarget - storiesCounts.published);
   const storiesHit = storiesTarget === 0 || storiesCounts.published >= storiesTarget;
   const storiesPercent = storiesTarget > 0 ? Math.min(100, Math.round((storiesCounts.published / storiesTarget) * 100)) : (storiesCounts.published > 0 ? 100 : 0);
 
-  // 4. Ads / Sponsored Content
+  // Ads / Sponsored Content
   const adsCounts = countFor((d) => d.format === 'ad' || (d.format as any) === 'ads');
   const adsTarget = isAdsSelected ? goals.ads || 0 : 0;
   const adsRemaining = Math.max(0, adsTarget - adsCounts.published);
   const adsHit = adsTarget === 0 || adsCounts.published >= adsTarget;
   const adsPercent = adsTarget > 0 ? Math.min(100, Math.round((adsCounts.published / adsTarget) * 100)) : (adsCounts.published > 0 ? 100 : 0);
 
-  // 5. Other (custom content)
+  // Other (custom content)
   const otherLabel = (goals.otherLabel || 'Other Content').trim();
   const isOtherAds = otherLabel.toLowerCase().includes('ad');
   const otherCounts = countFor((d) => {
@@ -310,7 +310,7 @@ export function computeClientGoalsProgress(
     hit: otherHit,
   };
 
-  // Visible goals: ONLY items that are selected and have a target > 0!
+  // Only selected items with a target > 0 are visible
   const allItems = [reelsItem, postsItem, storiesItem, adsItem, otherItem];
   const visibleGoals = allItems.filter((item) => item.selected && item.target > 0);
 
@@ -336,7 +336,7 @@ export function computeClientGoalsProgress(
   const missingSummary = missingParts.length > 0 ? missingParts.join(', ') : 'None';
 
   const alertMessage = alertNeeded
-    ? `⚠️ END-OF-MONTH ALERT: Monthly deliverables goals are at risk for ${client.name}! Only ${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining in ${period}. Missing to publish: ${missingSummary}. Immediate action required!`
+    ? `End-of-month alert: monthly deliverable goals are at risk for ${client.name}. ${daysRemaining} day${daysRemaining > 1 ? 's' : ''} remaining in ${period}. Still to publish: ${missingSummary}.`
     : `Monthly goals for ${client.name}: ${totalPublished}/${totalTarget} completed (${totalPercent}%).`;
 
   return {

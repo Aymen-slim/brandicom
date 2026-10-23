@@ -348,7 +348,7 @@ export function ClientGoalsProgressBar({
             >
               {alertSuccess ? (
                 <>
-                  <CheckCircle2 size={14} /> Alert Dispatched ✓
+                  <CheckCircle2 size={14} /> Alert dispatched
                 </>
               ) : (
                 <>
@@ -398,7 +398,7 @@ export function ClientGoalsProgressBar({
             <AlertTriangle size={20} color="#dc2626" style={{ flexShrink: 0, marginTop: 2 }} />
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 800, color: '#991b1b', marginBottom: 3 }}>
-                ⚠️ End-of-Month Alert: Content Goals Not Yet Met!
+                End-of-month alert: content goals not yet met
               </div>
               <div style={{ fontSize: 12, color: '#b91c1c', lineHeight: 1.5 }}>
                 Only <strong>{progress.daysRemaining} day{progress.daysRemaining > 1 ? 's' : ''}</strong> remain in {progress.period}.
@@ -459,9 +459,10 @@ export function ClientGoalsProgressBar({
                   transition: 'transform 0.15s ease, box-shadow 0.15s ease',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {getFormatIcon(item.key)} {item.label}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, minHeight: 34, marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.3 }}>
+                    <span style={{ marginTop: 1, flexShrink: 0 }}>{getFormatIcon(item.key)}</span>
+                    <span>{item.label}</span>
                   </span>
                   <span
                     style={{
@@ -471,13 +472,15 @@ export function ClientGoalsProgressBar({
                       borderRadius: 5,
                       backgroundColor: item.hit ? '#ecfdf5' : progress.alertNeeded ? '#fef2f2' : theme.badgeBg,
                       color: item.hit ? '#059669' : progress.alertNeeded ? '#dc2626' : theme.text,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
                     }}
                   >
-                    {item.hit ? 'Goal Met ✓' : item.target > 0 ? `-${item.remaining} remaining` : 'No Target'}
+                    {item.hit ? 'Goal met' : item.target > 0 ? `${item.remaining} left` : 'No Target'}
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, marginTop: 'auto' }}>
                   <span style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
                     {item.published}{' '}
                     <span style={{ fontSize: 12.5, fontWeight: 500, color: '#64748b' }}>
@@ -510,12 +513,25 @@ export function ClientGoalsProgressBar({
                   />
                 </div>
 
-                {item.inProgress > 0 && (
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', backgroundColor: '#f59e0b' }} />
-                    +{item.inProgress} currently in production
-                  </div>
-                )}
+                <div style={{ fontSize: 11, color: item.inProgress > 0 ? '#64748b' : '#94a3b8', marginTop: 6, minHeight: 16, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      backgroundColor: item.inProgress > 0 ? '#f59e0b' : item.hit ? '#10b981' : '#cbd5e1',
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span>
+                    {item.inProgress > 0
+                      ? `+${item.inProgress} currently in production`
+                      : item.hit
+                        ? 'Monthly target completed'
+                        : 'No items in production'}
+                  </span>
+                </div>
               </div>
             );
           })}
@@ -556,7 +572,7 @@ export function ClientGoalsProgressBar({
             <span style={{ fontWeight: 600 }}>Overall Monthly Delivery Pace</span>
             <span style={{ fontWeight: 700, color: progress.allGoalsHit ? '#059669' : '#0f172a' }}>
               {progress.totalPublished} / {progress.totalTarget} items published ({progress.totalPercent}%)
-              {progress.allGoalsHit && ' — All targets achieved! 🎉'}
+              {progress.allGoalsHit && ' All targets met.'}
             </span>
           </div>
 
@@ -796,7 +812,7 @@ export function ClientGoalsProgressBar({
               </div>
 
               <div style={{ background: '#f8fafc', padding: 10, borderRadius: 8, fontSize: 11.5, color: '#64748b' }}>
-                💡 <strong>Automated Alerts:</strong> An alert notification is automatically flagged during the last 7 days of the month whenever active targets are behind schedule.
+                <strong>Automated alerts:</strong> In the last 7 days of the month, an alert is flagged when active targets are behind schedule.
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>

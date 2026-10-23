@@ -181,6 +181,7 @@ export function ContentCalendar({
   );
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed' | 'overdue'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [expandedDays, setExpandedDays] = useState<Record<string, boolean>>({});
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
@@ -192,9 +193,16 @@ export function ContentCalendar({
 
   useEffect(() => {
     const controller = new AbortController();
-    const useServerRows = initialRead.current || serverRows.current !== initialDeliverables;
-    initialRead.current = false;
+    const isInitialRange = range.from === initialRange.from && range.to === initialRange.to && revision === 0;
+    const useServerRows = isInitialRange || serverRows.current !== initialDeliverables;
     serverRows.current = initialDeliverables;
+    if (useServerRows && viewMode !== 'agenda') {
+      setMonthDeliverables(initialDeliverables);
+      setDeliverables(initialDeliverables);
+      setDataLoading(false);
+      setDataError('');
+      return () => controller.abort();
+    }
     const read = async () => {
       setDataLoading(true);
       setDataError('');
@@ -307,7 +315,7 @@ export function ContentCalendar({
       // Find client name in O(1)
       const clientName = del.clientName || clientMap.get(del.clientId)?.name || 'Client';
 
-      // 1. Filming Event (Shoot)
+      // Filming Event (Shoot)
       if (del.filmingDate) {
         const isCompleted = Boolean(del.filmed);
         const isOverdue = !isCompleted && del.filmingDate < todayStr;
@@ -321,7 +329,7 @@ export function ContentCalendar({
         });
       }
 
-      // 2. Posting Event (Publish)
+      // Posting Event (Publish)
       if (del.publishDate) {
         const isCompleted = Boolean(del.published);
         const isOverdue = !isCompleted && del.publishDate < todayStr;
@@ -835,7 +843,7 @@ export function ContentCalendar({
             </span>
           </div>
           <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '10px' }}>
-            {monthlyStats.overdueCount === 0 ? '✓ Everything is on schedule' : 'Click to filter overdue content'}
+            {monthlyStats.overdueCount === 0 ? 'On schedule' : 'Click to filter overdue content'}
           </div>
         </div>
       </div>
@@ -1095,7 +1103,7 @@ export function ContentCalendar({
 
                   {/* Day Events Stack */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
-                    {dayEvents.map((evt, idx) => {
+                    {(expandedDays[dayObj.dateStr] ? dayEvents : dayEvents.slice(0, 3)).map((evt, idx) => {
                       const isFilming = evt.type === 'filming';
                       const { bg: badgeBg, text: badgeText, border: badgeBorder } = getCalendarEventColors(evt);
 
@@ -1157,7 +1165,7 @@ export function ContentCalendar({
                                 </span>
                               ) : evt.isOverdue ? (
                                 <span
-                                  title="Overdue!"
+                                  title="Overdue"
                                   style={{
                                     fontSize: '8.5px',
                                     fontWeight: 800,
@@ -1210,6 +1218,33 @@ export function ContentCalendar({
                         </div>
                       );
                     })}
+                    {dayEvents.length > 3 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedDays((prev) => ({
+                            ...prev,
+                            [dayObj.dateStr]: !prev[dayObj.dateStr],
+                          }))
+                        }
+                        style={{
+                          marginTop: 'auto',
+                          padding: '3px 6px',
+                          borderRadius: '4px',
+                          border: '1px dashed #cbd5e1',
+                          backgroundColor: '#f8fafc',
+                          color: '#475569',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                        }}
+                      >
+                        {expandedDays[dayObj.dateStr]
+                          ? 'Show less'
+                          : `+${dayEvents.length - 3} more`}
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -1316,7 +1351,7 @@ export function ContentCalendar({
                                 : 'Content Post'}
                             </span>
                             {evt.isCompleted && (
-                              <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>Done ✓</span>
+                              <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>Done</span>
                             )}
                           </div>
 
@@ -1408,7 +1443,7 @@ export function ContentCalendar({
                             {evt.date}
                           </div>
                           <div style={{ fontSize: '11px', color: isTodayDate ? '#9333ea' : '#9ca3af', fontWeight: 600 }}>
-                            {isTodayDate ? 'Today!' : isPastDate ? 'Past' : 'Upcoming'}
+                            {isTodayDate ? 'Today' : isPastDate ? 'Past' : 'Upcoming'}
                           </div>
                         </div>
 

@@ -243,7 +243,7 @@ export function SettingsManager({ initialUsers, initialGoals, user }: SettingsMa
           }),
         });
       }
-      setGoalSavedMsg('Goal targets updated successfully!');
+      setGoalSavedMsg('Goal targets updated.');
       setTimeout(() => setGoalSavedMsg(null), 3000);
     } catch (err) {
       console.error('Error saving goals:', err);

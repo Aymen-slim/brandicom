@@ -129,7 +129,7 @@ export function AiAssistantDrawer({ initialOpen = false }: { initialOpen?: boole
           if (event === 'error') {
             setStatusText(null);
             const msg = data.message || 'AI request failed.';
-            assistant = assistant ? `${assistant}\n\n⚠️ ${msg}` : `⚠️ ${msg}`;
+            assistant = assistant ? `${assistant}\n\n${msg}` : `${msg}`;
             setItems((prev) => {
               const next = [...prev];
               const last = next[next.length - 1];
@@ -172,8 +172,8 @@ export function AiAssistantDrawer({ initialOpen = false }: { initialOpen?: boole
                 ...m,
                 content:
                   m.content +
-                  `\n\n_${action === 'apply' ? '✓ Applied successfully' : 'Rejected'}._` +
-                  (createdClient ? `\n\n👉 **[Open ${createdClient.name || 'Client'} Workspace →](/clients/${createdClient.id})**` : ''),
+                  `\n\n_${action === 'apply' ? 'Applied.' : 'Rejected.'}_` +
+                  (createdClient ? `\n\n**[Open ${createdClient.name || 'Client'} workspace](/clients/${createdClient.id})**` : ''),
                 proposal: undefined,
               }
             : m
@@ -304,7 +304,7 @@ export function AiAssistantDrawer({ initialOpen = false }: { initialOpen?: boole
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-                                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>🏢 {act.name}</strong>
+                                <strong style={{ fontSize: 13.5, color: '#0f172a' }}>{act.name}</strong>
                                 {act.status && (
                                   <span
                                     style={{
@@ -323,20 +323,20 @@ export function AiAssistantDrawer({ initialOpen = false }: { initialOpen?: boole
                               </div>
 
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6, color: '#475569', fontSize: 11.5 }}>
-                                {act.industry && <span>🏷️ <strong>Industry:</strong> {act.industry}</span>}
-                                {act.location && <span>📍 <strong>Location:</strong> {act.location}</span>}
+                                {act.industry && <span><strong>Industry:</strong> {act.industry}</span>}
+                                {act.location && <span><strong>Location:</strong> {act.location}</span>}
                                 {act.monthlyFee != null && (
                                   <span style={{ color: '#047857', fontWeight: 700 }}>
-                                    💰 {act.monthlyFee} DT / mo
+                                    Fee: {act.monthlyFee} DT / mo
                                   </span>
                                 )}
                               </div>
 
                               {(act.contactName || act.contactPhone || act.contactEmail) && (
                                 <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed #cbd5e1', fontSize: 11.5, color: '#334155' }}>
-                                  👤 <strong>{act.contactName || 'Contact'}</strong>
-                                  {act.contactPhone && ` • 📞 ${act.contactPhone}`}
-                                  {act.contactEmail && ` • ✉️ ${act.contactEmail}`}
+                                  <strong>{act.contactName || 'Contact'}</strong>
+                                  {act.contactPhone && ` • ${act.contactPhone}`}
+                                  {act.contactEmail && ` • ${act.contactEmail}`}
                                 </div>
                               )}
 

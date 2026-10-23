@@ -429,10 +429,12 @@ select.input-field {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .delta-tag.positive {
@@ -513,8 +515,9 @@ select.input-field {
 }
 
 /* Desktop vs Mobile Navigation Drawer & Bottom Bar */
-.mobile-nav-btn {
-  display: none;
+.mobile-nav-btn,
+.sidebar-close-btn {
+  display: none !important;
 }
 
 .mobile-tab-bar {
@@ -577,7 +580,7 @@ select.input-field {
 .header-right-wrap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
@@ -613,7 +616,8 @@ select.input-field {
 }
 
 .period-picker-label {
-  min-width: 125px;
+  min-width: 78px;
+  padding: 0 6px;
   text-align: center;
   font-size: 12.5px;
   font-weight: 600;
@@ -750,8 +754,10 @@ select.input-field {
   font-weight: 600;
   color: #4f46e5;
   background: rgba(79, 70, 229, 0.08);
-  padding: 0 5px;
+  padding: 1px 5px;
   border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .role-tag-member {
@@ -762,8 +768,10 @@ select.input-field {
   font-weight: 600;
   color: #059669;
   background: rgba(5, 150, 105, 0.08);
-  padding: 0 5px;
+  padding: 1px 5px;
   border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sidebar-signout-btn {
@@ -1000,11 +1008,6 @@ select.input-field {
   position: sticky;
   top: 0;
   z-index: 50;
-  -webkit-transform: translate3d(0, 0, 0);
-  transform: translate3d(0, 0, 0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  will-change: transform;
 }
 
 .mobile-header-btn {
@@ -1091,15 +1094,15 @@ select.input-field {
   }
 
   .mobile-nav-btn {
-    display: inline-flex;
+    display: inline-flex !important;
     align-items: center;
     justify-content: center;
-    background: transparent;
-    border: none;
+    background: #ffffff;
+    border: 1px solid var(--border-subtle);
     padding: 6px;
     cursor: pointer;
     color: var(--text-primary);
-    border-radius: var(--radius-sm);
+    border-radius: 9px;
   }
 
   .mobile-brand-icon {

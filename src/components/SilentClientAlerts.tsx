@@ -90,9 +90,17 @@ export function SilentClientAlerts({ alerts }: { alerts: SilentClientAlert[] }) 
   };
 
   return (
-    <section aria-label="Clients without a recent post" style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 18 }}>
+    <section
+      aria-label="Clients without a recent post"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: visible.length > 1 ? 'repeat(auto-fit, minmax(380px, 1fr))' : '1fr',
+        gap: 12,
+        marginBottom: 18,
+      }}
+    >
       {error && (
-        <div role="status" style={{ fontSize: 13, fontWeight: 700, color: '#9f1239' }}>
+        <div role="status" style={{ fontSize: 13, fontWeight: 700, color: '#9f1239', gridColumn: '1 / -1' }}>
           {error}
         </div>
       )}
@@ -103,29 +111,29 @@ export function SilentClientAlerts({ alerts }: { alerts: SilentClientAlert[] }) 
           style={{
             display: 'flex',
             alignItems: 'flex-start',
-            gap: 14,
-            padding: '18px 16px',
-            borderRadius: 16,
+            gap: 12,
+            padding: '14px 16px',
+            borderRadius: 14,
             background: 'linear-gradient(135deg, #fff1f2 0%, #fff7ed 100%)',
-            border: '2px solid #fb7185',
-            boxShadow: '0 12px 28px rgba(225, 29, 72, 0.12)',
+            border: '1.5px solid #fda4af',
+            boxShadow: '0 4px 14px rgba(225, 29, 72, 0.08)',
           }}
         >
           <ClientMark name={alert.name} logoUrl={alert.logoUrl} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#be123c', fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              <AlertTriangle size={16} aria-hidden="true" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#be123c', fontSize: 11, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <AlertTriangle size={14} aria-hidden="true" />
               Posting alert
             </div>
-            <h2 style={{ margin: '4px 0 0', fontSize: 22, lineHeight: 1.2, fontWeight: 800, color: '#111827' }}>
+            <h2 style={{ margin: '2px 0 0', fontSize: 16, lineHeight: 1.25, fontWeight: 800, color: '#111827' }}>
               {alert.neverPosted ? `Nothing posted for ${alert.name}` : `No post for ${alert.name} in ${alert.daysSilent} days`}
             </h2>
-            <p style={{ margin: '6px 0 0', fontSize: 14, color: '#7f1d1d' }}>
+            <p style={{ margin: '4px 0 0', fontSize: 12.5, color: '#7f1d1d' }}>
               {alert.neverPosted
                 ? `This active client has had no post for ${alert.daysSilent} days.`
                 : `Last post ${formatAlertDate(alert.lastPostDate || '')}. More than 6 days with nothing published.`}
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               <Link href={`/calendar?client=${alert.clientId}`} className="btn btn-sm" style={{ background: '#e11d48', color: '#fff', fontWeight: 700 }}>
                 Schedule content
               </Link>
@@ -141,9 +149,9 @@ export function SilentClientAlerts({ alerts }: { alerts: SilentClientAlert[] }) 
             title="Close alert"
             disabled={pending === `${alert.clientId}:${alert.gapKey}`}
             onClick={() => { void closeAlert(alert); }}
-            style={{ color: '#9f1239', flexShrink: 0 }}
+            style={{ color: '#9f1239', flexShrink: 0, padding: '4px' }}
           >
-            <X size={20} />
+            <X size={16} />
           </button>
         </article>
       ))}

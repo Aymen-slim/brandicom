@@ -739,7 +739,7 @@ export function DeliverableTracker({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#6b7280' }}>
-            <span>{toFilmCount > 0 ? `${toFilmCount} remaining to shoot` : 'All scheduled content filmed!'}</span>
+            <span>{toFilmCount > 0 ? `${toFilmCount} remaining to shoot` : 'All scheduled content filmed.'}</span>
             <span>{nextShoot ? `Next shoot: ${formatDateDisplay(nextShoot)}` : 'No upcoming shoot set'}</span>
           </div>
         </div>
@@ -794,7 +794,7 @@ export function DeliverableTracker({
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11.5px', color: '#6b7280' }}>
-            <span>{toPublishCount > 0 ? `${toPublishCount} remaining to post` : 'All scheduled content published!'}</span>
+            <span>{toPublishCount > 0 ? `${toPublishCount} remaining to post` : 'All scheduled content published.'}</span>
             <span>{nextPost ? `Next post: ${formatDateDisplay(nextPost)}` : 'No upcoming post set'}</span>
           </div>
         </div>
@@ -1318,7 +1318,7 @@ export function DeliverableTracker({
                           )}
                           {filmingToday && !d.filmed && (
                             <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 700 }}>
-                              Shoot today!
+                              Shoot today
                             </span>
                           )}
                         </div>

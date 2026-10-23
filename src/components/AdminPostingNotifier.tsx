@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { DeliverableData, UserSummary } from '@/types';
 import {
@@ -284,7 +285,7 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
                             height: '24px',
                           }}
                         >
-                          {publishingId === post.id ? 'Publishing...' : 'Mark Published ✓'}
+                          {publishingId === post.id ? 'Publishing...' : 'Mark published'}
                         </button>
                       </div>
                     </div>
@@ -302,7 +303,7 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
 
               {data.todayPosts.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '16px 10px', fontSize: '12px', color: '#9ca3af' }}>
-                  No more posts scheduled for today!
+                  No more posts scheduled for today.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
@@ -362,7 +363,7 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
                             marginLeft: 'auto',
                           }}
                         >
-                          {publishingId === post.id ? 'Publishing...' : 'Mark Published ✓'}
+                          {publishingId === post.id ? 'Publishing...' : 'Mark published'}
                         </button>
                       </div>
                     </div>
@@ -410,21 +411,20 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
       )}
 
       {/* 3. First-Thing Daily Briefing Modal / Toast for Admin */}
-      {showBriefingModal && totalUrgent > 0 && (
+      {showBriefingModal && totalUrgent > 0 && typeof document !== 'undefined' && createPortal(
         <div
           style={{
             position: 'fixed',
-            bottom: '16px',
-            right: '16px',
-            width: 'min(400px, calc(100vw - 32px))',
-            maxHeight: '85vh',
+            bottom: '20px',
+            right: '20px',
+            width: 'min(380px, calc(100vw - 32px))',
+            maxHeight: '80vh',
             backgroundColor: '#ffffff',
             borderRadius: 'var(--radius-lg)',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08)',
-            border: '2px solid #6366f1',
+            boxShadow: '0 20px 30px -5px rgba(15, 23, 42, 0.18), 0 8px 12px -6px rgba(15, 23, 42, 0.08)',
+            border: '1px solid #c7d2fe',
             zIndex: 9999,
             overflow: 'hidden',
-            animation: 'fadeIn 0.2s ease',
           }}
         >
           {/* Briefing Top Bar */}
@@ -535,7 +535,7 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
                     flexShrink: 0,
                   }}
                 >
-                  {publishingId === post.id ? '...' : 'Publish ✓'}
+                  {publishingId === post.id ? '...' : 'Publish'}
                 </button>
               </div>
             ))}
@@ -582,7 +582,8 @@ export function AdminPostingNotifier({ user }: AdminPostingNotifierProps) {
               Dismiss
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -397,7 +397,7 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
 
                       {/* Name & Location */}
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                           {client.logoUrl ? (
                             <img
                               src={getProxiedImageUrl(client.logoUrl)}
@@ -415,6 +415,7 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                                 border: '1px solid #e2e8f0',
                                 flexShrink: 0,
                                 backgroundColor: '#f8fafc',
+                                marginTop: 2,
                               }}
                             />
                           ) : (
@@ -432,13 +433,14 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                                 fontWeight: 700,
                                 flexShrink: 0,
                                 letterSpacing: '0.02em',
+                                marginTop: 2,
                               }}
                             >
                               {client.name.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <div>
-                            <div style={{ fontWeight: 600, color: '#111827', fontSize: '13.5px' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, color: '#111827', fontSize: '13.5px', lineHeight: 1.3 }}>
                               {client.name}
                             </div>
                             {client.location && (
@@ -452,47 +454,48 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                                   marginTop: '1px',
                                 }}
                               >
-                                <MapPin size={10} color="#9ca3af" />
-                                <span>{client.location}</span>
+                                <MapPin size={10} color="#9ca3af" style={{ flexShrink: 0 }} />
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{client.location}</span>
                               </div>
                             )}
+                            {(() => {
+                              const socials = client.socialAccounts || [];
+                              const cur = socials.reduce((acc, s) => acc + (s.followers || 0), 0);
+                              const base = socials.reduce((acc, s) => acc + (s.initialFollowers || 0), 0);
+                              if (cur > 0) {
+                                const diff = cur - base;
+                                return (
+                                  <div
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      marginTop: 2,
+                                      fontSize: 11,
+                                      color: '#4b5563',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: 600 }}>{formatNumber(cur)} followers</span>
+                                    {base > 0 && diff !== 0 && (
+                                      <span
+                                        style={{
+                                          color: diff > 0 ? '#059669' : '#dc2626',
+                                          fontWeight: 700,
+                                          fontSize: 10.5,
+                                        }}
+                                        title={`Started with ${formatNumber(base)} on ${client.startDate || 'start date'}`}
+                                      >
+                                        ({diff > 0 ? `+${formatNumber(diff)}` : formatNumber(diff)})
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </div>
-                        {(() => {
-                          const socials = client.socialAccounts || [];
-                          const cur = socials.reduce((acc, s) => acc + (s.followers || 0), 0);
-                          const base = socials.reduce((acc, s) => acc + (s.initialFollowers || 0), 0);
-                          if (cur > 0) {
-                            const diff = cur - base;
-                            return (
-                              <div
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  marginTop: 3,
-                                  fontSize: 11,
-                                  color: '#4b5563',
-                                }}
-                              >
-                                <span style={{ fontWeight: 600 }}>{formatNumber(cur)} followers</span>
-                                {base > 0 && diff !== 0 && (
-                                  <span
-                                    style={{
-                                      color: diff > 0 ? '#059669' : '#dc2626',
-                                      fontWeight: 700,
-                                      fontSize: 10.5,
-                                    }}
-                                    title={`Started with ${formatNumber(base)} on ${client.startDate || 'start date'}`}
-                                  >
-                                    ({diff > 0 ? `+${formatNumber(diff)}` : formatNumber(diff)})
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
                       </td>
 
                       {/* Status / Stage */}
@@ -520,13 +523,13 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                       </td>
 
                       {isAdmin && (
-                        <td>
-                          <div style={{ fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums' }}>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                             {client.contract?.monthlyFee != null ? formatMoney(client.contract.monthlyFee) : '—'}
                           </div>
                         </td>
                       )}
-                      <td style={{ fontSize: 12, color: '#6b7280' }}>{formatTenure(client.startDate)}</td>
+                      <td style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{formatTenure(client.startDate)}</td>
 
                       {/* Services */}
                       <td>
@@ -691,13 +694,14 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                                   gap: 3,
                                   backgroundColor: '#f5f3ff',
                                   border: '1px solid #e0e7ff',
-                                  padding: '1px 5px',
+                                  padding: '1px 6px',
                                   borderRadius: 4,
                                   width: 'fit-content',
+                                  whiteSpace: 'nowrap',
                                 }}
                                 title="Guaranteed monthly content targets"
                               >
-                                <Sparkles size={10} color="#7c3aed" />
+                                <Sparkles size={10} color="#7c3aed" style={{ flexShrink: 0 }} />
                                 <span>{items.join(' · ')}</span>
                               </div>
                             );
@@ -966,7 +970,7 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                 </div>
                 <div className="grid-responsive-3" style={{ gap: '8px' }}>
                   <div>
-                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>🎬 Reels / month</label>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>Reels / month</label>
                     <input
                       type="number"
                       min="0"
@@ -977,7 +981,7 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>📸 Posts / month</label>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>Posts / month</label>
                     <input
                       type="number"
                       min="0"
@@ -988,7 +992,7 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
                     />
                   </div>
                   <div>
-                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>📱 Stories / month</label>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>Stories / month</label>
                     <input
                       type="number"
                       min="0"
@@ -1002,7 +1006,7 @@ export function ClientTable({ initialClients, availableUsers, user, initialPage,
 
                 <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '8px', display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px' }}>
                   <div>
-                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>⚡ Custom Format Name (Optional)</label>
+                    <label style={{ fontSize: '10.5px', color: '#64748b', display: 'block', marginBottom: 2 }}>Custom format name (optional)</label>
                     <input
                       type="text"
                       className="input-field"

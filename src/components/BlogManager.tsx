@@ -240,7 +240,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
               value={form.title}
               maxLength={160}
               required
-              placeholder="Catchy headline for the article"
+              placeholder="Article title"
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
             <span className="blog-field-hint">{form.title.length}/160</span>
@@ -252,7 +252,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
               className="input-field"
               value={form.excerpt}
               maxLength={220}
-              placeholder="One line shown on the blog listing (optional — we can use the opening text)"
+              placeholder="One line shown on the blog listing (optional; the opening text is used if blank)"
               onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
             />
             <span className="blog-field-hint">{form.excerpt.length}/220</span>
@@ -266,7 +266,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
               required
               value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })}
-              placeholder="Write your story here. Press Enter twice to start a new paragraph on the website."
+              placeholder="Write the post. Press Enter twice for a new paragraph."
             />
             <span className="blog-field-hint">
               {wordCount} words · ~{readMinutes} min read
@@ -400,7 +400,7 @@ export function BlogManager({ initialPosts }: BlogManagerProps) {
             <div className="blog-list-scroll">
               {filteredPosts.length === 0 ? (
                 <p className="blog-list-empty">
-                  {posts.length === 0 ? 'No posts yet — write your first one on the left.' : 'No posts match your search.'}
+                  {posts.length === 0 ? 'No posts yet.' : 'No posts match your search.'}
                 </p>
               ) : (
                 filteredPosts.map((post) => (

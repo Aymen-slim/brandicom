@@ -16,12 +16,26 @@ export function CreatorCard({ creator, onEdit }: CreatorCardProps) {
     ugc: { bg: '#f3e8ff', text: '#7e22ce' },
     presenter: { bg: '#fffbeb', text: '#b45309' },
     influencer: { bg: '#fce7f3', text: '#be185d' },
+    agency: { bg: '#eef2ff', text: '#4338ca' },
     editor: { bg: '#f1f5f9', text: '#475569' },
     designer: { bg: '#ecfdf5', text: '#047857' },
     model: { bg: '#fdf2f8', text: '#9d174d' },
   };
 
+  const roleLabels: Record<string, string> = {
+    videographer: 'Videographer',
+    photographer: 'Photographer',
+    ugc: 'UGC Creator',
+    presenter: 'Presenter',
+    influencer: 'Influencer',
+    agency: 'Agency',
+    editor: 'Editor',
+    designer: 'Designer',
+    model: 'Model',
+  };
+
   const currentRoleStyle = roleColors[creator.role] || roleColors.videographer;
+  const roleLabel = roleLabels[creator.role] || creator.role;
 
   const formatFollowers = (count: number | null) => {
     if (!count) return null;
@@ -53,12 +67,11 @@ export function CreatorCard({ creator, onEdit }: CreatorCardProps) {
               borderRadius: '4px',
               fontSize: '11px',
               fontWeight: 600,
-              textTransform: 'capitalize',
               backgroundColor: currentRoleStyle.bg,
               color: currentRoleStyle.text,
             }}
           >
-            {creator.role}
+            {roleLabel}
           </span>
         </div>
 
@@ -119,9 +132,9 @@ export function CreatorCard({ creator, onEdit }: CreatorCardProps) {
       >
         <div>
           <span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#9ca3af', fontWeight: 600 }}>
-            Day Rate
+            {creator.rateUnit && creator.rateUnit !== 'day' ? 'Rate' : 'Day Rate'}
           </span>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginTop: '1px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827', marginTop: '1px', whiteSpace: 'nowrap' }}>
             {creator.dayRate != null ? `${Number(creator.dayRate).toLocaleString()} TND/${creator.rateUnit || 'day'}` : (creator.dayRate === null ? '—' : 'Negotiable')}
           </div>
         </div>

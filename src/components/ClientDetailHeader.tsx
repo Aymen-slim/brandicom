@@ -213,7 +213,7 @@ export function ClientDetailHeader({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to sync monthly data');
 
-      // Success! Move to stage 5 and trigger celebratory transition
+      // Stage 5 shows the result before the summary modal opens
       setSyncStage(5);
       setSyncIsSuccessTransition(true);
       if (syncTimerRef.current) clearInterval(syncTimerRef.current);
@@ -227,7 +227,7 @@ export function ClientDetailHeader({
         onDeliverablesUpdated(data.deliverables);
       }
 
-      // Smooth brief transition before displaying results
+      // Brief delay so the success stage is visible
       setTimeout(() => {
         setSyncingMonth(false);
         setSyncIsSuccessTransition(false);
@@ -610,107 +610,108 @@ export function ClientDetailHeader({
                 )}
               </div>
             </div>
-            {/* Social Accounts & Follower Growth Badges */}
-            {(existingIg?.handle || existingTt?.handle) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
-                {existingIg && (existingIg.handle || existingIg.url) && (
-                  <a
-                    href={existingIg.url || `https://instagram.com/${cleanSocialHandle(existingIg.handle).replace(/^@/, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: '3px 10px',
-                      borderRadius: 6,
-                      backgroundColor: '#fdf2f8',
-                      color: '#9d174d',
-                      border: '1px solid #fbcfe8',
-                      textDecoration: 'none',
-                    }}
-                    title="Open Instagram Profile"
-                  >
-                    <InstagramIcon size={13} color="#be185d" />
-                    <span>{cleanSocialHandle(existingIg.handle) || 'Instagram'}</span>
-                    {existingIg.followers != null && (
-                      <span style={{ color: '#be185d', fontWeight: 700 }}>
-                        · {formatNumber(existingIg.followers)}
-                      </span>
-                    )}
-                  </a>
-                )}
-
-                {existingTt && (existingTt.handle || existingTt.url) && (
-                  <a
-                    href={existingTt.url || `https://tiktok.com/@${cleanSocialHandle(existingTt.handle).replace(/^@/, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: '3px 10px',
-                      borderRadius: 6,
-                      backgroundColor: '#f8fafc',
-                      color: '#0f172a',
-                      border: '1px solid #e2e8f0',
-                      textDecoration: 'none',
-                    }}
-                    title="Open TikTok Profile"
-                  >
-                    <TikTokIcon size={13} color="#0f172a" />
-                    <span>{cleanSocialHandle(existingTt.handle) || 'TikTok'}</span>
-                    {existingTt.followers != null && (
-                      <span style={{ color: '#0f172a', fontWeight: 700 }}>
-                        · {formatNumber(existingTt.followers)}
-                      </span>
-                    )}
-                  </a>
-                )}
-
-                {/* Follower Growth Comparison Pill */}
-                {(() => {
-                  const cur = (existingIg?.followers || 0) + (existingTt?.followers || 0);
-                  const base = (existingIg?.initialFollowers || 0) + (existingTt?.initialFollowers || 0);
-                  if (base > 0 && cur > 0) {
-                    const diff = cur - base;
-                    const pct = (diff / base) * 100;
-                    return (
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 5,
-                          fontSize: 12,
-                          fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: 6,
-                          backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
-                          color: diff >= 0 ? '#047857' : '#b91c1c',
-                          border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
-                        }}
-                        title={`Started with ${formatNumber(base)} followers on ${client.startDate || 'start date'} → Currently ${formatNumber(cur)}`}
-                      >
-                        <TrendingUp size={13} />
-                        <span>
-                          {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} followers ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
-                        </span>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
-            )}
           </div>
 
+          {/* Social Accounts & Follower Growth Badges */}
+          {(existingIg?.handle || existingTt?.handle) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+              {existingIg && (existingIg.handle || existingIg.url) && (
+                <a
+                  href={existingIg.url || `https://instagram.com/${cleanSocialHandle(existingIg.handle).replace(/^@/, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    padding: '3px 10px',
+                    borderRadius: 6,
+                    backgroundColor: '#fdf2f8',
+                    color: '#9d174d',
+                    border: '1px solid #fbcfe8',
+                    textDecoration: 'none',
+                  }}
+                  title="Open Instagram Profile"
+                >
+                  <InstagramIcon size={13} color="#be185d" />
+                  <span>{cleanSocialHandle(existingIg.handle) || 'Instagram'}</span>
+                  {existingIg.followers != null && (
+                    <span style={{ color: '#be185d', fontWeight: 700 }}>
+                      · {formatNumber(existingIg.followers)}
+                    </span>
+                  )}
+                </a>
+              )}
+
+              {existingTt && (existingTt.handle || existingTt.url) && (
+                <a
+                  href={existingTt.url || `https://tiktok.com/@${cleanSocialHandle(existingTt.handle).replace(/^@/, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    padding: '3px 10px',
+                    borderRadius: 6,
+                    backgroundColor: '#f8fafc',
+                    color: '#0f172a',
+                    border: '1px solid #e2e8f0',
+                    textDecoration: 'none',
+                  }}
+                  title="Open TikTok Profile"
+                >
+                  <TikTokIcon size={13} color="#0f172a" />
+                  <span>{cleanSocialHandle(existingTt.handle) || 'TikTok'}</span>
+                  {existingTt.followers != null && (
+                    <span style={{ color: '#0f172a', fontWeight: 700 }}>
+                      · {formatNumber(existingTt.followers)}
+                    </span>
+                  )}
+                </a>
+              )}
+
+              {/* Follower Growth Comparison Pill */}
+              {(() => {
+                const cur = (existingIg?.followers || 0) + (existingTt?.followers || 0);
+                const base = (existingIg?.initialFollowers || 0) + (existingTt?.initialFollowers || 0);
+                if (base > 0 && cur > 0) {
+                  const diff = cur - base;
+                  const pct = (diff / base) * 100;
+                  return (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: '3px 10px',
+                        borderRadius: 6,
+                        backgroundColor: diff >= 0 ? '#ecfdf5' : '#fef2f2',
+                        color: diff >= 0 ? '#047857' : '#b91c1c',
+                        border: `1px solid ${diff >= 0 ? '#a7f3d0' : '#fecaca'}`,
+                      }}
+                      title={`Started with ${formatNumber(base)} followers on ${client.startDate || 'start date'} → Currently ${formatNumber(cur)}`}
+                    >
+                      <TrendingUp size={13} />
+                      <span>
+                        {diff >= 0 ? `+${formatNumber(diff)}` : formatNumber(diff)} followers ({pct > 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`})
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+            </div>
+          )}
+
           {/* Services Pills */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '12px' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '10px' }}>
             {(client.services || []).map((service, idx) => (
               <span
                 key={idx}
@@ -731,19 +732,21 @@ export function ClientDetailHeader({
       </div>
 
         {/* Right Info: Retainer & Action Buttons */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '10px', minWidth: '120px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px', minWidth: '180px', marginLeft: 'auto' }}>
           {isAdmin && (
-          <div style={{ textAlign: 'left' }}>
-            <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 500 }}>
+          <div style={{ textAlign: 'right' }}>
+            <span style={{ fontSize: '11px', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
               Monthly fee
             </span>
             <div
               style={{
-                fontSize: '22px',
+                fontSize: '24px',
                 fontWeight: 800,
                 color: '#111827',
                 fontVariantNumeric: 'tabular-nums',
-                marginTop: '1px',
+                lineHeight: 1.15,
+                marginTop: '2px',
+                whiteSpace: 'nowrap',
               }}
             >
               {client.contract?.monthlyFee != null ? formatMoney(client.contract.monthlyFee) : '—'}
@@ -761,6 +764,9 @@ export function ClientDetailHeader({
               if ((!g.selectedFormats || g.selectedFormats.includes('stories')) && (g.stories ?? 0) > 0) {
                 items.push(`${g.stories}S`);
               }
+              if ((!g.selectedFormats || g.selectedFormats.includes('ads')) && (g.ads ?? 0) > 0) {
+                items.push(`${g.ads} Ads`);
+              }
               if ((!g.selectedFormats || g.selectedFormats.includes('other')) && (g.other ?? 0) > 0) {
                 items.push(`${g.other} ${g.otherLabel || 'Other'}`);
               }
@@ -769,16 +775,18 @@ export function ClientDetailHeader({
               return (
                 <div
                   style={{
-                    marginTop: 4,
+                    marginTop: 5,
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 4,
                     fontSize: 11,
-                    background: '#f1f5f9',
-                    color: '#334155',
+                    background: '#f5f3ff',
+                    border: '1px solid #e0e7ff',
+                    color: '#4338ca',
                     padding: '2px 8px',
-                    borderRadius: 4,
+                    borderRadius: 5,
                     fontWeight: 600,
+                    whiteSpace: 'nowrap',
                   }}
                   title="Monthly Contract Deliverables Quota"
                 >
@@ -790,7 +798,7 @@ export function ClientDetailHeader({
           </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
             {/* Month selector & Update Month & Followers Button */}
             <div
               style={{
@@ -1479,7 +1487,7 @@ export function ClientDetailHeader({
                 <div className="grid-responsive-3" style={{ gap: '10px' }}>
                   <div>
                     <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
-                      🎬 Reels / month
+                      Reels / month
                     </label>
                     <input
                       type="number"
@@ -1493,7 +1501,7 @@ export function ClientDetailHeader({
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
-                      📸 Posts / month (Photos/Carousels)
+                      Posts / month (Photos/Carousels)
                     </label>
                     <input
                       type="number"
@@ -1507,7 +1515,7 @@ export function ClientDetailHeader({
                   </div>
                   <div>
                     <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
-                      📱 Stories / month
+                      Stories / month
                     </label>
                     <input
                       type="number"
@@ -1525,7 +1533,7 @@ export function ClientDetailHeader({
                 <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 10, display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: '11px', color: '#475569', display: 'block', marginBottom: 3, fontWeight: 600 }}>
-                      ⚡ Custom Format Name (Optional)
+                      Custom format name (optional)
                     </label>
                     <input
                       type="text"
@@ -1856,7 +1864,7 @@ export function ClientDetailHeader({
                     marginTop: 2,
                   }}
                 >
-                  {syncIsSuccessTransition ? 'Done!' : `${syncCountdown}s`}
+                  {syncIsSuccessTransition ? 'Done' : `${syncCountdown}s`}
                 </span>
                 <span style={{ fontSize: 10.5, color: '#94a3b8' }}>
                   {syncIsSuccessTransition ? 'Complete' : 'Remaining'}
