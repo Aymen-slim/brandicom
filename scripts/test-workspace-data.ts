@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMockSupabase } from './mock-supabase';
-import { loadClientPage, loadCalendarDeliverables, loadClientDetail, loadMessages } from '../src/lib/data';
+import { loadClientPage, loadCalendarDeliverables, loadClientDetail, loadMessages, mapDeliverableRow } from '../src/lib/data';
+import { parseDeliverableLinks, serializeDeliverableLinks } from '../src/lib/deliverables';
 import { loadInvoicePage, loadExpensePage } from '../src/lib/finance';
 import { getCalendarRange } from '../src/lib/calendarRange';
 import { calendarRangeSchema } from '../src/lib/listValidation';
@@ -34,6 +35,36 @@ test('calendar range includes month overflow days and rejects invalid dates', ()
   assert.equal(calendarRangeSchema.safeParse({ from: '2026-10-01', to: '2026-09-01' }).success, false);
   assert.throws(() => parsePagination({ page: 0 }));
   assert.throws(() => parsePagination({ pageSize: 10000 }));
+});
+
+test('empty dual-platform links are stored and mapped as no link', () => {
+  assert.equal(serializeDeliverableLinks({ platform: 'both' }), null);
+
+  const legacy = mapDeliverableRow({
+    id: 'd1',
+    client_id: 'c1',
+    idea: 'Empty',
+    status: 'idea',
+    link: JSON.stringify({ platform: 'both', instagram: null, tiktok: null }),
+    platform: 'instagram',
+    creator_assignments: [],
+  });
+  assert.equal(legacy.link, null);
+  assert.equal(legacy.instagramLink, null);
+  assert.equal(legacy.tiktokLink, null);
+  assert.equal(parseDeliverableLinks(legacy.link, legacy.platform).primaryLink, null);
+
+  const linked = mapDeliverableRow({
+    id: 'd2',
+    client_id: 'c1',
+    idea: 'Linked',
+    status: 'published',
+    link: serializeDeliverableLinks({ instagramLink: 'https://www.instagram.com/reel/abc/' }),
+    platform: 'instagram',
+    creator_assignments: [],
+  });
+  assert.equal(linked.link, 'https://www.instagram.com/reel/abc/');
+  assert.equal(linked.instagramLink, 'https://www.instagram.com/reel/abc/');
 });
 
 test('calendar ranges retain either event and creator-scheduling fallback', async () => {

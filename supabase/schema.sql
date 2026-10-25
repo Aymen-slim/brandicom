@@ -364,6 +364,24 @@ create table if not exists public.ai_usage (
   primary key (user_id, day)
 );
 
+create table if not exists public.ai_runs (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid references public.users (id) on delete set null,
+  client_id      uuid references public.clients (id) on delete set null,
+  task           text not null,
+  feature        text,
+  model          text not null,
+  status         text not null,
+  latency_ms     integer,
+  prompt_tokens  integer,
+  output_tokens  integer,
+  total_tokens   integer,
+  tool_count     integer not null default 0,
+  error          text,
+  metadata       jsonb,
+  created_at     timestamptz not null default now()
+);
+
 -- Migrate contract_value if the old column still exists.
 do $$ begin
   if exists (
@@ -473,6 +491,8 @@ create index if not exists health_client_idx           on public.client_health_s
 create index if not exists social_client_idx           on public.client_social_accounts (client_id);
 create index if not exists ai_conv_user_idx            on public.ai_conversations (user_id, created_at desc);
 create index if not exists ai_msg_conv_idx             on public.ai_messages (conversation_id, created_at);
+create index if not exists ai_runs_created_idx         on public.ai_runs (created_at desc);
+create index if not exists ai_runs_user_idx            on public.ai_runs (user_id, created_at desc);
 
 -- ---------------------------------------------------------------------------
 -- Authorization helpers
@@ -525,6 +545,7 @@ alter table public.ai_conversations         enable row level security;
 alter table public.ai_messages              enable row level security;
 alter table public.ai_proposals             enable row level security;
 alter table public.ai_usage                 enable row level security;
+alter table public.ai_runs                  enable row level security;
 
 -- users
 drop policy if exists users_select on public.users;
@@ -688,6 +709,12 @@ drop policy if exists health_write on public.client_health_snapshots;
 create policy health_write on public.client_health_snapshots
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+-- Health snapshots are readable by assigned members. Never persist
+-- invoice-derived factors in the shared JSON; the score already reflects them.
+update public.client_health_snapshots
+   set factors = factors - 'overdueInvoices'
+ where factors ? 'overdueInvoices';
+
 drop policy if exists reports_select on public.client_reports;
 create policy reports_select on public.client_reports
   for select to authenticated using (public.has_client_access(client_id));
@@ -712,6 +739,39 @@ create policy ai_prop_owner on public.ai_proposals
 drop policy if exists ai_usage_owner on public.ai_usage;
 create policy ai_usage_owner on public.ai_usage
   for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists ai_runs_insert on public.ai_runs;
+create policy ai_runs_insert on public.ai_runs
+  for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists ai_runs_select on public.ai_runs;
+create policy ai_runs_select on public.ai_runs
+  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+
+create or replace function public.increment_ai_usage(p_tokens integer default 0)
+returns public.ai_usage
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  result public.ai_usage;
+begin
+  if auth.uid() is null then
+    raise exception 'not authenticated';
+  end if;
+
+  insert into public.ai_usage (user_id, day, requests, tokens)
+  values (auth.uid(), current_date, 1, greatest(coalesce(p_tokens, 0), 0))
+  on conflict (user_id, day) do update
+    set requests = public.ai_usage.requests + 1,
+        tokens = public.ai_usage.tokens + greatest(coalesce(p_tokens, 0), 0)
+  returning * into result;
+
+  return result;
+end;
+$$;
+
+revoke all on function public.increment_ai_usage(integer) from public, anon;
+grant execute on function public.increment_ai_usage(integer) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Auth profile trigger

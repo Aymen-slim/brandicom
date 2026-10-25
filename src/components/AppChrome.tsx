@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import dynamic from 'next/dynamic';
 
 const AiAssistantDrawer = dynamic(
@@ -8,19 +8,11 @@ const AiAssistantDrawer = dynamic(
   { ssr: false }
 );
 
+/**
+ * The assistant owns its own keyboard shortcut and floating launcher, so it
+ * must stay mounted. Previously it was only mounted after ⌘J, which meant the
+ * floating launcher never existed.
+ */
 export function AppChrome() {
-  const [showAi, setShowAi] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
-        setShowAi(true);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-
-  if (!showAi) return null;
-  return <AiAssistantDrawer initialOpen />;
+  return <AiAssistantDrawer />;
 }

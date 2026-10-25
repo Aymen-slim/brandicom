@@ -5,6 +5,7 @@ import { extractClientMonthlyGoals, packClientMonthlyGoals, computeClientGoalsPr
 import { extractClientInspirations } from './clientInspirations';
 import { extractClientFollowerHistory } from './clientFollowers';
 import { currentMonth, shiftPeriod, isValidPeriod } from './period';
+import { memberHealthSummary, memberSafeHealthFactors } from './healthPrivacy';
 import {
   AssignmentStatus,
   ClientAssignmentData,
@@ -374,7 +375,7 @@ export function mapDeliverableRow(row: any): DeliverableData {
     filmed: Boolean(row.filmed),
     published: Boolean(row.published),
     status,
-    link: parsedLinks.primaryLink || row.link,
+    link: parsedLinks.primaryLink || null,
     instagramLink: parsedLinks.instagramLink,
     tiktokLink: parsedLinks.tiktokLink,
     format,
@@ -723,6 +724,7 @@ export function fetchClientDetail(clientId: string, user?: CurrentUser | null, o
 }
 
 export async function loadClientDetail(supabase: DataClient, clientId: string, user?: CurrentUser | null, opts: { overview?: boolean } = {}) {
+  const isAdmin = user?.role === 'admin';
 
   const [clientRes, supportsFilmingDate] = await Promise.all([
     supabase.from('clients').select(CLIENT_SELECT).eq('id', clientId).maybeSingle(),
@@ -753,7 +755,7 @@ export async function loadClientDetail(supabase: DataClient, clientId: string, u
       .order('computed_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    user?.role === 'admin'
+    isAdmin
       ? supabase
           .from('client_contracts')
           .select('client_id, contract_type, monthly_fee, currency, billing_day, start_date, end_date, notes')
@@ -770,8 +772,15 @@ export async function loadClientDetail(supabase: DataClient, clientId: string, u
         clientId: healthRes.data.client_id,
         score: healthRes.data.score,
         risk: healthRes.data.risk,
-        factors: healthRes.data.factors || {},
-        aiSummary: healthRes.data.ai_summary,
+        factors: isAdmin
+          ? healthRes.data.factors || {}
+          : memberSafeHealthFactors(healthRes.data.factors),
+        aiSummary: isAdmin
+          ? healthRes.data.ai_summary
+          : memberHealthSummary(
+              { score: healthRes.data.score, risk: healthRes.data.risk },
+              clientRow.name
+            ),
         computedAt: healthRes.data.computed_at,
       }
     : null;

@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import { InstagramIcon, TikTokIcon } from '@/components/SocialIcons';
+import { parseDeliverableLinks } from '@/lib/deliverables';
 
 interface DeliverableTrackerProps {
   clientId: string;
@@ -33,6 +34,11 @@ interface DeliverableTrackerProps {
 }
 
 type ViewMode = 'all' | 'filming' | 'posting';
+
+function hasSyncableLink(deliverable?: DeliverableData | null): boolean {
+  if (!deliverable) return false;
+  return Boolean(parseDeliverableLinks(deliverable.link, deliverable.platform).primaryLink);
+}
 
 export function DeliverableTracker({
   clientId,
@@ -111,16 +117,34 @@ export function DeliverableTracker({
   const [status, setStatus] = useState<DeliverableStatus>('idea');
 
   // Sync engagement metrics from Apify
-  const handleSyncMetrics = async (id: string) => {
-    setSyncingId(id);
+  const handleSyncMetrics = async (id: string, override?: DeliverableData) => {
     setSyncNotification(null);
+    const deliverable = override || deliverables.find((item) => item.id === id);
+    if (deliverable && !hasSyncableLink(deliverable)) {
+      setSyncNotification({
+        id,
+        msg: 'Add an Instagram or TikTok post URL before syncing stats.',
+        isError: true,
+      });
+      window.setTimeout(() => setSyncNotification(null), 6000);
+      return;
+    }
+
+    setSyncingId(id);
     try {
       const res = await fetch(`/api/deliverables/${id}/sync-metrics`, {
         method: 'POST',
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to sync stats via Apify');
+        const message = data.error || 'Failed to sync stats via Apify';
+        // Missing/invalid links are expected user states, not console errors.
+        if (res.status >= 400 && res.status < 500) {
+          setSyncNotification({ id, msg: message, isError: true });
+          window.setTimeout(() => setSyncNotification(null), 7000);
+          return;
+        }
+        throw new Error(message);
       }
 
       if (data.deliverable) {
@@ -242,8 +266,8 @@ export function DeliverableTracker({
           prev.map((item) => (item.id === id ? { ...item, ...updated } : item))
         );
         if (onUpdate) onUpdate();
-        if (igTrimmed || ttTrimmed || singleTrimmed) {
-          handleSyncMetrics(id);
+        if (hasSyncableLink(updated)) {
+          handleSyncMetrics(updated.id, updated);
         }
       }
     } catch (err) {
@@ -314,8 +338,8 @@ export function DeliverableTracker({
       );
       setEditingDeliverable(null);
       if (onUpdate) onUpdate();
-      if (editForm.instagramLink || editForm.tiktokLink || editForm.link) {
-        handleSyncMetrics(updated.id);
+      if (hasSyncableLink(updated)) {
+        handleSyncMetrics(updated.id, updated);
       }
     } catch (err: any) {
       alert(err.message || 'Error updating deliverable');
@@ -522,8 +546,8 @@ export function DeliverableTracker({
         setStatus('idea');
         setIsAdding(false);
         if (onUpdate) onUpdate();
-        if (created.link || created.instagramLink || created.tiktokLink) {
-          handleSyncMetrics(created.id);
+        if (hasSyncableLink(created)) {
+          handleSyncMetrics(created.id, created);
         }
       }
     } catch (err) {
@@ -1596,7 +1620,7 @@ export function DeliverableTracker({
 
                           <button
                             type="button"
-                            onClick={() => handleSyncMetrics(d.id)}
+                            onClick={() => handleSyncMetrics(d.id, d)}
                             disabled={syncingId === d.id}
                             style={{
                               fontSize: '10.5px',
@@ -1671,7 +1695,7 @@ export function DeliverableTracker({
 
                           <button
                             type="button"
-                            onClick={() => handleSyncMetrics(d.id)}
+                            onClick={() => handleSyncMetrics(d.id, d)}
                             disabled={syncingId === d.id}
                             style={{
                               fontSize: '10.5px',
@@ -1951,7 +1975,7 @@ export function DeliverableTracker({
                             {(d.link || d.instagramLink || d.tiktokLink) && (
                               <button
                                 type="button"
-                                onClick={() => handleSyncMetrics(d.id)}
+                                onClick={() => handleSyncMetrics(d.id, d)}
                                 disabled={syncingId === d.id}
                                 style={{
                                   background: 'none',
@@ -1971,7 +1995,7 @@ export function DeliverableTracker({
                         ) : (d.link || d.instagramLink || d.tiktokLink) ? (
                           <button
                             type="button"
-                            onClick={() => handleSyncMetrics(d.id)}
+                            onClick={() => handleSyncMetrics(d.id, d)}
                             disabled={syncingId === d.id}
                             style={{
                               fontSize: '10.5px',

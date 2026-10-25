@@ -1,6 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-
-const DAILY_LIMIT = 80;
+import { dailyAiLimit, modelFor } from './config';
 
 export function getGemini() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -11,7 +10,10 @@ export function getGemini() {
 }
 
 export function geminiModel(): string {
-  return process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
+  return modelFor('chat');
 }
+
+/** @deprecated use dailyAiLimit() */
+const DAILY_LIMIT = dailyAiLimit();
 
 export { DAILY_LIMIT };

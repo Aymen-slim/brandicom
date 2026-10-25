@@ -8,6 +8,7 @@ import { computeGoalsAndMetrics, getDashboardClients } from '@/lib/goals';
 import { fetchSilentClientAlerts } from '@/lib/data';
 import { parseSilenceDismissals, SILENCE_DISMISS_COOKIE } from '@/lib/postingSilence';
 import { SilentClientAlerts } from '@/components/SilentClientAlerts';
+import { HealthRefreshButton } from '@/components/HealthRefreshButton';
 import { PageChrome } from '@/components/PageChrome';
 import { GoalProgressCard } from '@/components/GoalProgressCard';
 import { GaugeCard } from '@/components/GaugeCard';
@@ -41,14 +42,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     getDashboardClients(period),
     supabase
       .from('client_health_snapshots')
-      .select('client_id, score, risk, ai_summary, computed_at, clients(id, name, status)')
-      .in('risk', ['medium', 'high'])
-      .order('score', { ascending: true })
-      .limit(5),
+      .select('client_id, score, risk, computed_at, clients(id, name, status)')
+      .order('computed_at', { ascending: false })
+      .limit(300),
     silencePromise,
   ]);
 
-  const atRisk = atRiskRes.data;
+  // The table keeps history, so take the latest snapshot per client before
+  // filtering for risk. Without this, a recovered client can still appear.
+  const latestByClient = new Map<string, any>();
+  for (const row of atRiskRes.data || []) {
+    if (!latestByClient.has(row.client_id)) latestByClient.set(row.client_id, row);
+  }
+  const atRisk = Array.from(latestByClient.values())
+    .filter((row) => row.risk === 'medium' || row.risk === 'high')
+    .sort((a, b) => Number(a.score) - Number(b.score))
+    .slice(0, 5);
 
   return (
     <PageChrome
@@ -129,9 +138,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
         <StageBarChart breakdown={metrics.pipelineBreakdown} totalClients={metrics.totalClients} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div className="glass-card" style={{ padding: 16 }}>
-            <div style={{ fontWeight: 600, marginBottom: 10, fontSize: 13 }}>At-risk clients</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>At-risk clients</div>
+              {user.role === 'admin' && <HealthRefreshButton />}
+            </div>
             {(atRisk || []).length === 0 ? (
-              <div style={{ fontSize: 12, color: '#9ca3af' }}>No health snapshots yet. Ask AI or run the health check from settings.</div>
+              <div style={{ fontSize: 12, color: '#9ca3af' }}>No health snapshots yet. Use Refresh health to compute them.</div>
             ) : (
               (atRisk || []).map((row: any) => (
                 <Link

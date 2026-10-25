@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { notifyWorkspaceChange } from '@/lib/workspaceEvents';
 import Link from 'next/link';
 import { ClientData, DeliverableData, MessageData, UserSummary } from '@/types';
 import { ClientDetailHeader } from './ClientDetailHeader';
 import { ClientGoalsProgressBar } from './ClientGoalsProgressBar';
 import { computeClientGoalsProgress } from '@/lib/clientGoals';
+import { currentMonth } from '@/lib/period';
 import dynamic from 'next/dynamic';
 import { formatMoney, formatNumber, formatPercent, cleanSocialHandle, parseFollowerInput } from '@/lib/format';
 import { InstagramIcon, TikTokIcon } from './SocialIcons';
-import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight, AlertTriangle, Calendar, X } from 'lucide-react';
+import { FileText, Sparkles, Plus, Printer, Trash2, RefreshCw, ExternalLink, TrendingUp, Users, Edit3, ArrowUpRight, AlertTriangle, Calendar, X, Download, Check } from 'lucide-react';
 
 const Markdown = dynamic(() => import('react-markdown'), { ssr: false });
 const tabLoading = () => <div style={{ padding: 20, fontSize: 12, color: '#9ca3af' }}>Loading...</div>;
@@ -68,9 +69,47 @@ export function ClientWorkspace({
   const [metricsFor, setMetricsFor] = useState<DeliverableData | null>(null);
   const [ideas, setIdeas] = useState<any[] | null>(null);
   const [ideasBusy, setIdeasBusy] = useState(false);
+  const [ideasError, setIdeasError] = useState<string | null>(null);
+  const [addingIdea, setAddingIdea] = useState<string | null>(null);
+  const [addedIdeas, setAddedIdeas] = useState<Set<string>>(() => new Set());
   const [report, setReport] = useState<string | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportMonth, setReportMonth] = useState(currentMonth());
+  const [reportLanguage, setReportLanguage] = useState('en');
+  const [reportSavedAt, setReportSavedAt] = useState<string | null>(null);
   const [invoices, setInvoices] = useState<any[] | null>(null);
   const [newInvoiceOpen, setNewInvoiceOpen] = useState(false);
+  const reportRequestRef = useRef(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    const requestId = ++reportRequestRef.current;
+    setReport(null);
+    setReportSavedAt(null);
+    setReportError(null);
+    setReportLoading(true);
+    fetch(
+      `/api/ai/report?clientId=${encodeURIComponent(currentClient.id)}&month=${encodeURIComponent(reportMonth)}`,
+      { signal: controller.signal, cache: 'no-store' }
+    )
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return response.json().catch(() => null);
+      })
+      .then((data) => {
+        if (controller.signal.aborted || requestId !== reportRequestRef.current) return;
+        setReport(typeof data?.content_md === 'string' ? data.content_md : null);
+        setReportSavedAt(data?.created_at || null);
+      })
+      .catch(() => {
+        // A missing saved report is not an error the user needs to see.
+      })
+      .finally(() => {
+        if (!controller.signal.aborted && requestId === reportRequestRef.current) setReportLoading(false);
+      });
+    return () => controller.abort();
+  }, [currentClient.id, reportMonth]);
   const [newInvoiceSubtotal, setNewInvoiceSubtotal] = useState(
     currentClient.contract?.monthlyFee != null ? String(currentClient.contract.monthlyFee) : ''
   );
@@ -403,45 +442,105 @@ export function ClientWorkspace({
 
   const genIdeas = async () => {
     setIdeasBusy(true);
+    setIdeasError(null);
     try {
       const res = await fetch('/api/ai/ideas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: currentClient.id }),
+        body: JSON.stringify({ clientId: currentClient.id, month: currentMonth(), language: 'en' }),
       });
-      const data = await res.json();
-      setIdeas(data.ideas || []);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not generate ideas.');
+      setIdeas(Array.isArray(data.ideas) ? data.ideas : []);
+    } catch (error: any) {
+      setIdeasError(error?.message || 'Could not generate ideas.');
     } finally {
       setIdeasBusy(false);
     }
   };
 
   const genReport = async () => {
-    const res = await fetch('/api/ai/report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientId: currentClient.id }),
-    });
-    const data = await res.json();
-    setReport(data.content_md || data.error || '');
+    if (report && !window.confirm('Regenerate this report? The saved version for this month will be replaced.')) return;
+    const requestId = ++reportRequestRef.current;
+    setReportLoading(false);
+    setReportBusy(true);
+    setReportError(null);
+    try {
+      const res = await fetch('/api/ai/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: currentClient.id,
+          month: reportMonth,
+          language: reportLanguage,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (requestId !== reportRequestRef.current) return;
+      if (!res.ok) throw new Error(data.error || 'Could not generate the report.');
+      setReport(data.content_md || '');
+      setReportSavedAt(data.created_at || null);
+    } catch (error: any) {
+      if (requestId === reportRequestRef.current) {
+        setReportError(error?.message || 'Could not generate the report.');
+      }
+    } finally {
+      setReportBusy(false);
+    }
   };
 
-  const addIdea = async (idea: any) => {
-    const res = await fetch(`/api/clients/${currentClient.id}/deliverables`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        idea: idea.title,
-        hook: idea.hook,
-        format: idea.format,
-        platform: idea.platform,
-        status: 'idea',
-      }),
-    });
-    if (res.ok) {
-      const created = await res.json();
+  const addIdea = async (idea: any, silent = false): Promise<boolean> => {
+    const key = String(idea.title || '');
+    if (!key || addedIdeas.has(key)) return false;
+    if (!silent) setAddingIdea(key);
+    try {
+      const res = await fetch(`/api/clients/${currentClient.id}/deliverables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idea: idea.title,
+          hook: idea.hook,
+          format: idea.format,
+          platform: idea.platform,
+          status: 'idea',
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not add this idea.');
+      const created = data;
       setDeliverables((prev) => [created, ...prev]);
+      setAddedIdeas((prev) => new Set(prev).add(key));
+      return true;
+    } catch (error: any) {
+      setIdeasError(error?.message || 'Could not add this idea.');
+      return false;
+    } finally {
+      if (!silent) setAddingIdea(null);
     }
+  };
+
+  const addAllIdeas = async () => {
+    if (!ideas || ideas.length === 0) return;
+    setAddingIdea('__all__');
+    setIdeasError(null);
+    for (const idea of ideas) {
+      const title = String(idea.title || '');
+      if (!title || addedIdeas.has(title)) continue;
+      const ok = await addIdea(idea, true);
+      if (!ok) break;
+    }
+    setAddingIdea(null);
+  };
+
+  const downloadReport = () => {
+    if (!report) return;
+    const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${currentClient.name.replace(/[^\w-]+/g, '-')}-${reportMonth}-report.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   const goalsProgress = useMemo(
@@ -567,18 +666,62 @@ export function ClientWorkspace({
               {currentClient.health ? (
                 <>
                   <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.1, color: '#0f172a' }}>{currentClient.health.score}</div>
-                  <p style={{ fontSize: 13, color: '#4b5563', marginTop: 8, lineHeight: 1.55 }}>{currentClient.health.aiSummary}</p>
+                  <p style={{ fontSize: 13, color: '#4b5563', marginTop: 8, lineHeight: 1.55 }}>
+                    {isAdmin
+                      ? currentClient.health.aiSummary
+                      : `${currentClient.name} is at ${currentClient.health.risk} risk with a health score of ${currentClient.health.score}/100.`}
+                  </p>
                 </>
               ) : (
                 <p style={{ fontSize: 13, color: '#9ca3af' }}>No health snapshot yet.</p>
               )}
             </div>
             <div style={{ marginTop: 14 }}>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={genReport}>
-                Generate monthly report
-              </button>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 7 }}>Client report</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  type="month"
+                  className="input-field"
+                  value={reportMonth}
+                  onChange={(event) => setReportMonth(event.target.value || currentMonth())}
+                  aria-label="Report month"
+                  style={{ width: 138, padding: '6px 8px', fontSize: 12 }}
+                />
+                <select
+                  className="input-field"
+                  value={reportLanguage}
+                  onChange={(event) => setReportLanguage(event.target.value)}
+                  aria-label="Report language"
+                  style={{ width: 112, padding: '6px 8px', fontSize: 12 }}
+                >
+                  <option value="en">English</option>
+                  <option value="fr">Français</option>
+                  <option value="ar">العربية</option>
+                </select>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={genReport} disabled={reportBusy || reportLoading}>
+                  <FileText size={13} /> {reportBusy ? 'Generating…' : 'Generate report'}
+                </button>
+                {report && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={downloadReport}>
+                    <Download size={13} /> Download
+                  </button>
+                )}
+              </div>
+              {reportLoading && (
+                <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>Loading saved report…</div>
+              )}
+              {reportError && (
+                <div role="alert" style={{ marginTop: 8, fontSize: 12, color: '#b91c1c' }}>
+                  {reportError}
+                </div>
+              )}
               {report && (
                 <div style={{ marginTop: 12, fontSize: 13 }}>
+                  {reportSavedAt && (
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 6 }}>
+                      Saved {new Date(reportSavedAt).toLocaleString()}
+                    </div>
+                  )}
                   <Markdown>{report}</Markdown>
                 </div>
               )}
@@ -589,23 +732,81 @@ export function ClientWorkspace({
 
       {tab === 'content' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={genIdeas} disabled={ideasBusy}>
-              <Sparkles size={13} /> {ideasBusy ? 'Generating…' : 'AI ideas & scripts'}
+              <Sparkles size={13} /> {ideasBusy ? 'Generating…' : ideas ? 'Regenerate ideas' : 'AI ideas & scripts'}
             </button>
+            {ideas && ideas.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={addAllIdeas}
+                disabled={addingIdea === '__all__' || addedIdeas.size >= ideas.length}
+              >
+                <Plus size={13} /> {addingIdea === '__all__' ? 'Adding…' : `Add all ${ideas.length}`}
+              </button>
+            )}
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>Grounded in goals, top posts and saved inspirations.</span>
           </div>
-          {ideas && (
+          {ideasError && (
+            <div role="alert" className="glass-card" style={{ padding: '10px 12px', fontSize: 12, color: '#b91c1c', borderColor: '#fecaca', background: '#fff7f7' }}>
+              {ideasError}
+            </div>
+          )}
+          {ideas && ideas.length === 0 && (
+            <div className="glass-card" style={{ padding: 16, fontSize: 12, color: '#6b7280' }}>
+              No ideas returned. Try regenerating.
+            </div>
+          )}
+          {ideas && ideas.length > 0 && (
             <div className="glass-card grid-responsive-2" style={{ padding: 16, gap: 10 }}>
-              {ideas.map((idea, i) => (
-                <div key={i} style={{ border: '1px solid #eaedf0', borderRadius: 8, padding: 12 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{idea.title}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280', margin: '6px 0' }}>{idea.hook}</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{idea.format} · {idea.platform}</div>
-                  <button type="button" className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={() => addIdea(idea)}>
-                    Add to tracker
-                  </button>
-                </div>
-              ))}
+              {ideas.map((idea, i) => {
+                const key = String(idea.title || '');
+                const added = addedIdeas.has(key);
+                const adding = addingIdea === key;
+                return (
+                  <div key={`${key}-${i}`} style={{ border: '1px solid #eaedf0', borderRadius: 9, padding: 12, background: '#fff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: '#0f172a', lineHeight: 1.35 }}>{idea.title}</div>
+                      <span style={{ fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.03em', fontWeight: 800, color: '#5b21b6', background: '#ede9fe', borderRadius: 999, padding: '2px 6px', whiteSpace: 'nowrap' }}>
+                        {idea.format}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#475569', margin: '6px 0 5px', lineHeight: 1.5 }}>{idea.hook}</div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'capitalize' }}>{idea.platform}</div>
+                    {(idea.whyItFits || idea.scriptOutline) && (
+                      <details style={{ marginTop: 8 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#4f46e5' }}>
+                          Why it fits & script
+                        </summary>
+                        {idea.whyItFits && (
+                          <div style={{ marginTop: 7, fontSize: 11.5, color: '#475569', lineHeight: 1.5 }}>
+                            <strong style={{ color: '#334155' }}>Why: </strong>
+                            {idea.whyItFits}
+                          </div>
+                        )}
+                        {idea.scriptOutline && (
+                          <div style={{ marginTop: 6, fontSize: 11.5, color: '#334155', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                            <strong>Script</strong>
+                            {'\n'}
+                            {idea.scriptOutline}
+                          </div>
+                        )}
+                      </details>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{ marginTop: 9 }}
+                      onClick={() => void addIdea(idea)}
+                      disabled={added || adding}
+                    >
+                      {added ? <Check size={12} /> : <Plus size={12} />}
+                      {added ? 'Added' : adding ? 'Adding…' : 'Add to tracker'}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
           {contentLoading ? <div role="status" className="glass-card" style={{ padding: 20 }}>Loading content...</div>

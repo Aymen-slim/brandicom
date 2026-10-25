@@ -155,6 +155,10 @@ export function serializeDeliverableLinks(input: {
   const tt = cleanUrl(input.tiktokLink);
   const fallback = cleanUrl(input.link);
 
+  // "Both" with no URLs must stay empty. Storing {"platform":"both"} made the
+  // UI think a syncable link existed and produced 400s from sync-metrics.
+  if (!ig && !tt && !fallback) return null;
+
   // If fallback is provided and contains JSON or both URLs, parse it first
   if (!ig && !tt && fallback) {
     const parsed = parseDeliverableLinks(fallback, input.platform);

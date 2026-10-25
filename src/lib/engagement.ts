@@ -53,15 +53,19 @@ export async function addPostMetrics(
 }
 
 export async function clientEngagementSummary(clientId: string, period: string): Promise<EngagementSummary> {
-  const { start, end } = periodRange(period);
   const supabase = createServerSupabaseClient();
-  const { data: dels, error } = await supabase
+  let query = supabase
     .from('deliverables')
     .select('id, publish_date, published, post_metrics(views, likes, comments, shares, saves, reach, impressions, followers_gained, captured_at)')
     .eq('client_id', clientId)
-    .eq('published', true)
-    .gte('publish_date', start)
-    .lte('publish_date', end);
+    .eq('published', true);
+
+  if (period !== 'all') {
+    const { start, end } = periodRange(period);
+    query = query.gte('publish_date', start).lte('publish_date', end);
+  }
+
+  const { data: dels, error } = await query;
   if (error) throw error;
   return summarize(dels || []);
 }
